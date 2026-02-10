@@ -1,9 +1,9 @@
 getwd()
-setwd("./Beetles")
-df<-read.csv("../Downloads/BeetleMeasurements.csv")
-meta<-read.csv("./NEON-SiteMap-Table.csv")
+setwd("/home/aly/Beetles/BeetleBodySizeVariation")
+df<-read.csv("./BeetleMeasurements.csv")
+meta<-read.csv("./NEON_Field_Site_Metadata_20260130.csv")
 
-df<-merge(df, meta, by.x="siteID", by.y="siteCode", all.x=TRUE)
+df<-merge(df, meta, by.x="siteID", by.y="site_id", all.x=TRUE)
 
 head(df)
 
@@ -92,7 +92,7 @@ table(subset(ElytraLength, plotID=="STER_006")$scientificName)
 #### Overlap Stats ####
 library(Ostats)
 
-ElytraLengthDF<-ElytraLength[,c("domainCode","siteID","plotID","scientificName","dist_cm")]
+ElytraLengthDF<-ElytraLength[,c("domain_id","siteID","plotID","scientificName","dist_cm")]
 
 Ostats_example <- Ostats(traits = as.matrix(ElytraLengthDF[,'dist_cm', drop = FALSE]),
                          sp = factor(ElytraLengthDF$scientificName),
@@ -122,7 +122,7 @@ library(dplyr)
 library(ggrepel)
 
 meta
-Ostats_map<-merge(meta, Ostats_example$overlaps_norm, by.x="siteCode", by.y = "row.names")
+Ostats_map<-merge(meta, Ostats_example$overlaps_norm, by.x="site_id", by.y = "row.names")
 Ostats_map <- Ostats_map %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
@@ -151,7 +151,7 @@ ggplot() +
   # Site labels
   geom_text_repel(
     data = Ostats_map,
-    aes(label = siteCode, geometry = geometry),
+    aes(label = site_id, geometry = geometry),
     stat = "sf_coordinates",
     size = 3,
     min.segment.length = 0,
@@ -182,8 +182,8 @@ ggplot() +
   )
 
 #### Species wise density distributions ####
-head(ElytraLengthDF)
-species_stats <- ElytraLengthDF %>%
+head(ElytraLength)
+species_stats <- ElytraLength %>%
   group_by(scientificName) %>%
   summarise(
     n = n(),
@@ -193,7 +193,7 @@ species_stats <- ElytraLengthDF %>%
   ) %>%
   ungroup()
 
-species_site_stats <- ElytraLengthDF %>%
+species_site_stats <- ElytraLength %>%
   group_by(siteID, scientificName) %>%
   summarise(
     n = n(),
@@ -203,8 +203,8 @@ species_site_stats <- ElytraLengthDF %>%
   ) %>%
   ungroup()
 
-species_domain_stats <- ElytraLengthDF %>%
-  group_by(domainCode, scientificName) %>%
+species_domain_stats <- ElytraLength %>%
+  group_by(domain_id, scientificName) %>%
   summarise(
     n = n(),
     mean_dist_cm = mean(dist_cm, na.rm = TRUE),
@@ -213,7 +213,7 @@ species_domain_stats <- ElytraLengthDF %>%
   ) %>%
   ungroup()
 
-ggplot(ElytraLengthDF, aes(scientificName, dist_cm)) +
+ggplot(ElytraLength, aes(scientificName, dist_cm)) +
   geom_boxplot() +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -234,7 +234,7 @@ ggplot(species_site_stats,
 
 library(dplyr)
 
-species_occurrence <- ElytraLengthDF %>%
+species_occurrence <- ElytraLength %>%
   group_by(scientificName) %>%
   summarise(
     n_sites = n_distinct(siteID),
@@ -244,7 +244,8 @@ species_occurrence <- ElytraLengthDF %>%
 species_keep <- species_occurrence %>%
   filter(n_sites > 1, n_plots > 1) %>%
   pull(scientificName)
-ElytraLengthDF_multi <- ElytraLengthDF %>%
+
+ElytraLengthDF_multi <- ElytraLength %>%
   filter(scientificName %in% species_keep)
 
 species_var <- ElytraLengthDF_multi %>%
@@ -253,7 +254,11 @@ species_var <- ElytraLengthDF_multi %>%
     n = n(),
     mean_cm = mean(dist_cm, na.rm = TRUE),
     var_cm  = var(dist_cm, na.rm = TRUE),
-    cv2_pct = 100 * var_cm / mean_cm^2
+    cv2_pct = 100 * var_cm / mean_cm^2,
+    ID = "Spp",
+    Above = "None",
+    Site = "All",
+    Domain = "All"
   ) %>%
   ungroup()
 
@@ -263,9 +268,13 @@ plot_species_var <- ElytraLengthDF_multi %>%
     n = n(),
     mean_cm = mean(dist_cm, na.rm = TRUE),
     var_cm  = var(dist_cm, na.rm = TRUE),
-    cv2_pct = 100 * var_cm / mean_cm^2
+    cv2_pct = 100 * var_cm / mean_cm^2,
+    Above = unique(siteID),
+    Site = unique(siteID),
+    Domain = unique(domain_id)
   ) %>% 
   ungroup()
+colnames(plot_species_var)<-c("ID",colnames(plot_species_var)[2:length(colnames(plot_species_var))])
 
 site_species_var <- ElytraLengthDF_multi %>%
   group_by(siteID, scientificName) %>%
@@ -273,31 +282,39 @@ site_species_var <- ElytraLengthDF_multi %>%
     n = n(),
     mean_cm = mean(dist_cm, na.rm = TRUE),
     var_cm  = var(dist_cm, na.rm = TRUE),
-    cv2_pct = 100 * var_cm / mean_cm^2
+    cv2_pct = 100 * var_cm / mean_cm^2,
+    Above = unique(domain_id),
+    Site = unique(siteID),
+    Domain = unique(domain_id)
   ) %>%
   ungroup()
+colnames(site_species_var)<-c("ID",colnames(site_species_var)[2:length(colnames(site_species_var))])
+
 
 domain_species_var <- ElytraLengthDF_multi %>%
-  group_by(domainCode, scientificName) %>%
+  group_by(domain_id, scientificName) %>%
   summarise(
     n = n(),
     mean_cm = mean(dist_cm, na.rm = TRUE),
     var_cm  = var(dist_cm, na.rm = TRUE),
-    cv2_pct = 100 * var_cm / mean_cm^2
+    cv2_pct = 100 * var_cm / mean_cm^2,
+    Above = "Spp",
+    Site = "All",
+    Domain = unique(domain_id)
   ) %>%
   ungroup()
+colnames(domain_species_var)<-c("ID",colnames(domain_species_var)[2:length(colnames(domain_species_var))])
+
 
 plot_species_var$scale <- "Plot Level"
 species_var$scale <- "Species Level"
 site_species_var$scale <- "Site Level"
 domain_species_var$scale <- "Domain Level"
 
-var_all_scales <- bind_rows(
-  species_var %>% select(scientificName, n, cv2_pct, scale),
-  plot_species_var %>% select(scientificName, n, cv2_pct, scale),
-  site_species_var %>% select(scientificName, n, cv2_pct, scale),
-  domain_species_var %>% select(scientificName, n, cv2_pct, scale)
-)
+var_all_scales <- bind_rows(species_var,
+                            plot_species_var,
+                            site_species_var,
+                            domain_species_var)
 
 var_all_scales<-var_all_scales %>% filter(n >= 10)
 
@@ -306,22 +323,227 @@ var_all_scales$scale<-factor(
   ordered = TRUE,
   levels = c("Species Level", "Domain Level", "Site Level", "Plot Level"))
 
+head(var_all_scales)
 
-
-ggplot(subset(var_all_scales, scientificName!="Carabidae sp."), aes(scale, cv2_pct)) +
-  geom_violin(outlier.alpha = 0.3) +
-  scale_y_log10() +
-  theme_minimal() +
-  labs(
-    y = "Variance as % of mean² (CV² × 100)",
-    x = "Scale of aggregation"
-  )
-ggplot(subset(var_all_scales, scientificName!="Carabidae sp."),
-       aes(scale, cv2_pct, group = scientificName, col = log(n))) +
+png("./Figures/NestedCVpct.png", height = 10, width = 10, units = "in", res = 300)
+ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
+       aes(scale, cv2_pct, group = scientificName, col = Site, shape = Domain)) +
+  theme_pubr() + 
+  scale_shape_manual(values=c(16,15,17:25))+
   geom_point(size = 2) +
+  scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
+                                "#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
+                                "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D", 
+                                "#8A7C64", "#599861")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  theme_minimal() + facet_wrap(.~scientificName, scales = "free_y") 
+  ylab("Variance as % of mean² (CV² × 100)") +
+  facet_wrap(.~scientificName) 
+dev.off()
 
+png("./Figures/NestedVar.png", height = 10, width = 12, units = "in", res = 300)
+ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
+       aes(scale, var_cm, group = scientificName, col = Site, shape = Domain)) +
+  theme_pubr() + 
+  scale_shape_manual(values=c(16,15,17:25))+
+  geom_point(size = 2) +
+  scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
+    "#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
+    "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D", 
+    "#8A7C64", "#599861")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  ylab("Variance (cm)") +
+  facet_wrap(.~scientificName, scale="free_y") 
+dev.off()
+
+
+
+table(ElytraLengthDF_multi$scientificName)
+
+####Synuchus impunctatus####
+SYIM_all<-subset(ElytraLengthDF_multi, scientificName=="Synuchus impunctatus")
+SYIM_Domain<-SYIM_all
+SYIM_Site<-SYIM_all
+SYIM_Plot<-SYIM_all
+
+SYIM_all$Level<-"Species"
+SYIM_Domain$Level<-paste0("Domain")
+SYIM_Site$Level<-paste0("Site")
+SYIM_Plot$Level<-paste0("Plot")
+
+SYIM_all$LevelID<-"Species"
+SYIM_Domain$LevelID<-paste0("Domain:",SYIM_Domain$domain_id)
+SYIM_Site$LevelID<-paste0("Domain:",SYIM_Site$domain_id," Site",SYIM_Site$siteID)
+SYIM_Plot$LevelID<-paste0("Domain:",SYIM_Plot$domain_id," Plot",SYIM_Plot$plotID)
+table(SYIM_Plot$LevelID)
+
+SYIM<-rbind(SYIM_Domain,SYIM_Site,SYIM_Plot)
+
+png("./Figures/SynuchusImpunctatusNestedDensity.png", height = 9, width = 7, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Site,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Site Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Plot,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Plot Density") +
+      facet_wrap(.~domain_id),
+    nrow = 3
+  ),
+  top = text_grob("Synuchus impunctatus")
+)
+dev.off()
+
+####Calathus advena####
+SYIM_all<-subset(ElytraLengthDF_multi, scientificName=="Calathus advena")
+SYIM_Domain<-SYIM_all
+SYIM_Site<-SYIM_all
+SYIM_Plot<-SYIM_all
+
+SYIM_all$Level<-"Species"
+SYIM_Domain$Level<-paste0("Domain")
+SYIM_Site$Level<-paste0("Site")
+SYIM_Plot$Level<-paste0("Plot")
+
+SYIM_all$LevelID<-"Species"
+SYIM_Domain$LevelID<-paste0("Domain:",SYIM_Domain$domain_id)
+SYIM_Site$LevelID<-paste0("Domain:",SYIM_Site$domain_id," Site",SYIM_Site$siteID)
+SYIM_Plot$LevelID<-paste0("Domain:",SYIM_Plot$domain_id," Plot",SYIM_Plot$plotID)
+table(SYIM_Plot$LevelID)
+
+SYIM<-rbind(SYIM_Domain,SYIM_Site,SYIM_Plot)
+
+png("./Figures/CalathusAdvenaNestedDensity.png", height = 9, width = 7, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Site,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Site Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Plot,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Plot Density") +
+      facet_wrap(.~domain_id),
+    nrow = 3
+  ),
+  top = text_grob("Calathus advena")
+)
+dev.off()
+
+
+####Carabus goryi####
+SYIM_all<-subset(ElytraLengthDF_multi, scientificName=="Carabus goryi")
+SYIM_Domain<-SYIM_all
+SYIM_Site<-SYIM_all
+SYIM_Plot<-SYIM_all
+
+SYIM_all$Level<-"Species"
+SYIM_Domain$Level<-paste0("Domain")
+SYIM_Site$Level<-paste0("Site")
+SYIM_Plot$Level<-paste0("Plot")
+
+SYIM_all$LevelID<-"Species"
+SYIM_Domain$LevelID<-paste0("Domain:",SYIM_Domain$domain_id)
+SYIM_Site$LevelID<-paste0("Domain:",SYIM_Site$domain_id," Site",SYIM_Site$siteID)
+SYIM_Plot$LevelID<-paste0("Domain:",SYIM_Plot$domain_id," Plot",SYIM_Plot$plotID)
+table(SYIM_Plot$LevelID)
+
+SYIM<-rbind(SYIM_Domain,SYIM_Site,SYIM_Plot)
+
+png("./Figures/CarabusGoryiNestedDensity.png", height = 9, width = 7, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Site,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Site Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Plot,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Plot Density") +
+      facet_wrap(.~domain_id),
+    nrow = 3
+  ),
+  top = text_grob("Carabus goryi")
+)
+dev.off()
+
+
+####Cyclotrachelus torvus####
+SYIM_all<-subset(ElytraLengthDF_multi, scientificName=="Cyclotrachelus torvus")
+SYIM_Domain<-SYIM_all
+SYIM_Site<-SYIM_all
+SYIM_Plot<-SYIM_all
+
+SYIM_all$Level<-"Species"
+SYIM_Domain$Level<-paste0("Domain")
+SYIM_Site$Level<-paste0("Site")
+SYIM_Plot$Level<-paste0("Plot")
+
+SYIM_all$LevelID<-"Species"
+SYIM_Domain$LevelID<-paste0("Domain:",SYIM_Domain$domain_id)
+SYIM_Site$LevelID<-paste0("Domain:",SYIM_Site$domain_id," Site",SYIM_Site$siteID)
+SYIM_Plot$LevelID<-paste0("Domain:",SYIM_Plot$domain_id," Plot",SYIM_Plot$plotID)
+table(SYIM_Plot$LevelID)
+
+SYIM<-rbind(SYIM_Domain,SYIM_Site,SYIM_Plot)
+
+png("./Figures/CyclotrachelusTorvusNestedDensity.png", height = 9, width = 7, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Site,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Site Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Plot,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Plot Density") +
+      facet_wrap(.~domain_id),
+    nrow = 3
+  ),
+  top = text_grob("Cyclotrachelus torvus")
+)
+dev.off()
 #### Average distribution shape ####
 
 #Compute typical distribution
@@ -359,7 +581,7 @@ sim_low_n <- low_n %>%
   ) %>%
   unnest(cols = c(sim_vals)) %>%
   rename(dist_cm = sim_vals) %>%
-  mutate(domainCode = NA)  # will fill later from original DF
+  mutate(domain_id = NA)  # will fill later from original DF
 
 sim_low_n$plotID<-NA
 
@@ -394,6 +616,7 @@ Ostats_plot(plots = ElytraLength_aug$siteID,
             scale = "free_y") 
 
 par(mfrow=c(1,2))
+png("./Figures/Overlap.png", height = 3, width = 9, units = "in", res = 300)
 Ostats_plot(plots = ElytraLengthDF$siteID, 
             sp = ElytraLengthDF$scientificName, 
             traits = ElytraLengthDF$dist_cm, 
@@ -404,7 +627,9 @@ Ostats_plot(plots = ElytraLengthDF$siteID,
             n_col = 6,
             scale = "free",
             limits_x = c(0,1)) 
+dev.off()
 
+png("./Figures/Overlap_augmented.png", height = 3, width = 9, units = "in", res = 300)
 Ostats_plot(plots = ElytraLength_aug$siteID, 
             sp = ElytraLength_aug$scientificName, 
             traits = ElytraLength_aug$dist_cm, 
@@ -415,8 +640,8 @@ Ostats_plot(plots = ElytraLength_aug$siteID,
             n_col = 6,
             scale = "free",
             limits_x = c(0,1)) 
-
-Ostats_aug_map<-merge(meta, Ostats_aug$overlaps_norm, by.x="siteCode", by.y = "row.names")
+dev.off()
+Ostats_aug_map<-merge(meta, Ostats_aug$overlaps_norm, by.x="site_id", by.y = "row.names")
 Ostats_aug_map <- Ostats_aug_map %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
@@ -442,7 +667,7 @@ ggplot() +
   # Site labels
   geom_text_repel(
     data = Ostats_aug_map,
-    aes(label = siteCode, geometry = geometry),
+    aes(label = site_id, geometry = geometry),
     stat = "sf_coordinates",
     size = 3,
     min.segment.length = 0,
