@@ -1,7 +1,16 @@
+library(ggplot2)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(maps)
+library(dplyr)
+library(ggrepel)
+
 getwd()
-setwd("/home/aly/Beetles/BeetleBodySizeVariation")
+#setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 df<-read.csv("./BeetleMeasurements.csv")
 meta<-read.csv("./NEON_Field_Site_Metadata_20260130.csv")
+puum<-read.csv("./trait_annotations.csv")
 
 df<-merge(df, meta, by.x="siteID", by.y="site_id", all.x=TRUE)
 
@@ -15,8 +24,6 @@ str(df_sub)
 ElytraLength<-subset(df_sub, structure=="ElytraLength")
 
 hist(ElytraLength$dist_cm)
-
-library(ggplot2)
 
 site_spp<-table(ElytraLength$species, ElytraLength$siteID)
 site_spp<-as.data.frame(site_spp)
@@ -115,12 +122,6 @@ Ostats_plot(plots = ElytraLengthDF$siteID,
             scale = "free_y") 
 
 #### Map of overlaps ####
-library(ggplot2)
-library(sf)
-library(maps)
-library(dplyr)
-library(ggrepel)
-
 meta
 Ostats_map<-merge(meta, Ostats_example$overlaps_norm, by.x="site_id", by.y = "row.names")
 Ostats_map <- Ostats_map %>%
@@ -231,8 +232,6 @@ ggplot(species_site_stats,
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-
-library(dplyr)
 
 species_occurrence <- ElytraLength %>%
   group_by(scientificName) %>%
@@ -355,6 +354,32 @@ ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!
   facet_wrap(.~scientificName, scale="free_y") 
 dev.off()
 
+ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
+       aes(var_cm)) +
+  theme_pubr() + 
+  scale_shape_manual(values=c(16,15,17:25))+
+  geom_histogram() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  ylab("Variance (cm)") +
+  facet_wrap(.~scale, scale="free_y") 
+
+ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
+       aes(cv2_pct)) +
+  theme_pubr() + 
+  geom_histogram() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  ylab("Variance (cm)") +
+  facet_wrap(.~scale, scale="free_y")
+
+var_all_scales %>%
+  group_by(scale) %>%
+  summarise(
+    n = n(),
+    mean = mean(cv2_pct, na.rm = TRUE),
+    lower_ci = t.test(cv2_pct)$conf.int[1],
+    upper_ci = t.test(cv2_pct)$conf.int[2]
+  ) %>%
+  ungroup()
 
 
 table(ElytraLengthDF_multi$scientificName)
@@ -696,3 +721,85 @@ ggplot() +
     x = NULL,
     y = NULL
   )
+
+#### PUUM Explore ####
+# Load the beetle data from NEON API using the 'neonUtilities' package
+Beetle_dpID <- "DP1.10022.001"
+# Load NEON API token for accessing the data
+NEON_TOKEN <- read.delim("../../NEON_TOKEN", header = FALSE)[1, 1]  # Read in the NEON API token path anonymized
+
+# Load the beetle data from NEON API using the 'neonUtilities' package
+NEON_df <- neonUtilities::loadByProduct(
+  dpID = Beetle_dpID,  # Data product ID for beetles
+  site = "PUUM",  # Specify the site (PUUM is one of the NEON sites)
+  token = NEON_TOKEN,  # API token for accessing the NEON data
+  include.provisional = TRUE,  # Include provisional data (Must for PUUM)
+  check.size = FALSE)  # Do not check the file size
+
+# Extract taxonomist IDs for further analysis
+Neon_para <- NEON_df$bet_parataxonomistID  # Parataxonomist IDs from NEON data
+Neon_expert <- NEON_df$bet_expertTaxonomistIDProcessed  # Expert taxonomist IDs from NEON data
+
+#filter out parataxonomist IDs that were later re-IDed by experts
+neon_para_clean <- Neon_para %>%
+  filter(!(individualID %in% Neon_expert$individualID))
+# Find common columns between the two dataframes
+common_cols <- intersect(names(neon_para_clean), names(Neon_expert))
+
+# Subset dataframes to the common columns
+neon_para_common <- neon_para_clean[, common_cols]
+neon_expert_common <- Neon_expert[, common_cols]
+
+#Add a column to specify the identifier type
+neon_para_common$ID_status<-"para"
+neon_expert_common$ID_status<-"expert"
+
+# Row bind the two dataframes to create on harmonized reference
+combined_data <- bind_rows(neon_para_common, neon_expert_common)
+
+puum<-subset(puum, cm_elytra_max_length>0)
+puum<-merge(puum, combined_data, by ="individualID")
+  
+ggplot(data = puum, aes(x = cm_elytra_max_length, fill = scientificName)) +
+  geom_density(alpha = 0.5) +
+  xlab("Elytra Length (cm)") +
+  ylab("Density") + 
+#  scale_fill_discrete(labels = legend_labels, name = "Species (n)") +
+  theme_pubr()
+
+table(puum$scientificName)
+
+puum_n_site <- puum %>%
+  group_by(scientificName, plotID) %>%
+  summarise(
+    n_obs = n(),
+    mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
+    cv2_pct = 100 * var_cm / mean_cm^2,
+    .groups = "drop"
+  ) %>%
+  filter(n_obs >= 19)
+
+puum_n_site$var_mm<-puum_n_site$var_cm*100
+
+puum_n <- puum %>%
+  group_by(scientificName) %>%
+  summarise(
+    n_obs = n(),
+    mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
+    cv2_pct = 100 * var_cm / mean_cm^2,
+    .groups = "drop"
+  ) %>%
+  filter(n_obs >= 19)
+
+puum_n$var_mm<-puum_n$var_cm*100
+
+puum_n
+
+#### Inter annotator Variation ####
+table(df$user_name)
+df_lenght<-subset(df, structure=="ElytraLength")
+table(df_lenght$user_name)
+library(reshape2)
+
