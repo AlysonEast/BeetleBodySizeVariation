@@ -1,0 +1,194 @@
+---
+title: "SampleSize"
+author: "Alyson East"
+date: "2026-03-13"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Read in all the data
+
+```{r, echo=FALSE}
+library(neonUtilities)
+library(readxl)
+library(dplyr)
+library(tibble)
+library(stringr)
+library(gridExtra)
+
+setwd("/fs/ess/PAS2136/CarabidImaging/")
+
+# If already combined data exists, load it, else fetch and combine
+if (file.exists("./NEON_ExpertParaCombined.csv")) {
+  combined_data <- read.csv("./NEON_ExpertParaCombined.csv")
+} else {
+  neon_df <- neonUtilities::loadByProduct(
+    dpID = Beetle_dpID,
+    token = neon_token,
+    include.provisional = FALSE,
+    check.size = FALSE
+  )
+  
+  neon_para <- neon_df$bet_parataxonomistID
+  neon_expert <- neon_df$bet_expertTaxonomistIDProcessed
+  
+  neon_para_clean <- neon_para %>%
+    filter(!(individualID %in% neon_expert$individualID))
+  
+  common_cols <- intersect(names(neon_para_clean), names(neon_expert))
+  neon_para_common <- neon_para_clean[, common_cols]
+  neon_expert_common <- neon_expert[, common_cols]
+  
+  neon_para_common$ID_status <- "Para"
+  neon_expert_common$ID_status <- "Expert"
+  
+  combined_data <- bind_rows(neon_para_common, neon_expert_common)
+  combined_data$numbericID <- as.numeric(substr(combined_data$individualID, 
+                                                (nchar(combined_data$individualID) - 5), 
+                                                nchar(combined_data$individualID)))
+  
+  write.csv(combined_data, "./NEON_ExpertParaCombined.csv", row.names = FALSE)
+}
+
+if (file.exists("./NEON_ExpertParaCombined_Prelim.csv")) {
+  combined_data_prelim <- read.csv("./NEON_ExpertParaCombined_Prelim.csv")
+} else {
+  neon_df <- neonUtilities::loadByProduct(
+    dpID = Beetle_dpID,
+    token = neon_token,
+    include.provisional = TRUE,
+    startdate = "2023-01",
+    check.size = FALSE
+  )
+  
+  neon_para <- neon_df$bet_parataxonomistID
+  neon_expert <- neon_df$bet_expertTaxonomistIDProcessed
+  
+  neon_para_clean <- neon_para %>%
+    filter(!(individualID %in% neon_expert$individualID))
+  
+  common_cols <- intersect(names(neon_para_clean), names(neon_expert))
+  neon_para_common <- neon_para_clean[, common_cols]
+  neon_expert_common <- neon_expert[, common_cols]
+  
+  neon_para_common$ID_status <- "Para"
+  neon_expert_common$ID_status <- "Expert"
+  
+  combined_data_prelim <- bind_rows(neon_para_common, neon_expert_common)
+  combined_data_prelim$numbericID <- as.numeric(substr(combined_data_prelim$individualID, 
+                                                       (nchar(combined_data_prelim$individualID) - 5), 
+                                                       nchar(combined_data_prelim$individualID)))
+  
+  write.csv(combined_data_prelim, "./NEON_ExpertParaCombined_Prelim.csv", row.names = FALSE)
+}
+
+combined_data_prelim<-subset(combined_data_prelim, release=="PROVISIONAL")
+
+dim(combined_data)
+combined_data<-rbind(combined_data, combined_data_prelim)
+dim(combined_data)
+
+# Add year to combined_data
+combined_data$yearCollected <- as.numeric(substr(combined_data$collectDate, 1, 4))
+
+# Extract genus and species only from scientific name
+combined_data$scientificName_Species<-gsub(r"{\s*\([^\)]+\)}","",as.character(combined_data$scientificName))
+combined_data$scientificName_Species<-gsub(" {2,}", " ", combined_data$scientificName_Species)
+combined_data$scientificName_Species<-sub("^(\\S*\\s+\\S+).*", "\\1", combined_data$scientificName_Species)
+
+#### Read External Specimen Availability Metadata ####
+#Read from Chandra
+occurrences<-read.csv("./occurrences.csv")
+determinations<-read.csv("./determinations.csv")
+shipments<-read.csv("./shipments.csv")
+
+print("occurrences Summary:")
+dim(occurrences)
+head(occurrences)
+print("occurrences availability:")
+table(occurrences$availability, useNA = "ifany")
+
+# Filter NEON API data to only include available specimens
+combined_data_available<-combined_data %>%
+  filter((individualID %in% subset(occurrences, availability==1)$identifierValue))
+dim(occurrences)
+dim(combined_data_available)
+dim(combined_data_available)[1]/dim(combined_data)[1]
+
+
+df<-read.csv("./allIndividuals.csv")
+df<-subset(df, is.na(flag))
+```
+# Summary of Existing Image Dataset
+
+## Individuals by Domain and Year
+
+``` {r}
+grid.arrange(tableGrob(table(df$domainID, df$yearCollected)))
+```
+
+## Individuals by Genus
+``` {r}
+sort(table(sub(" .*", "", df$scientificName_Species)))
+```
+
+```{r}
+hist(table(df$scientificName_Species), main="Histogram of number of Species Occurence", xlab = "Number of Occurances")
+
+print("Number of Species with 1 occurence: ")
+sum(table(table(df$scientificName_Species))[1])
+
+print("Number of Species with less than 10 occurences: ")
+sum(table(table(df$scientificName_Species))[1:9])
+
+print("Percent Species with less than 1 occurence: ")
+(sum(table(table(df$scientificName_Species))[1])/sum(table(table(df$scientificName_Species))))*100
+
+print("Percent Species with less than 10 occurences: ")
+(sum(table(table(df$scientificName_Species))[1:9])/sum(table(table(df$scientificName_Species))))*100
+
+```
+
+# Comparing Existing Images to all NEON specimens
+
+```{r}
+print("Estimates Excluding individuals identifeid to the genus level or grouped hybrids, aka .sp in species name or sp1/sp2 in species name")
+
+speciesList<-sort(unique(df$scientificName_Species[!grepl("*.sp", df$scientificName_Species)]))
+speciesList<-gsub(r"{\s*\([^\)]+\)}","",as.character(speciesList))
+speciesList<-gsub(" {2,}", " ", speciesList)
+speciesList<-sub("^(\\S*\\s+\\S+).*", "\\1", speciesList)
+speciesList<-gsub("/.*$", "", speciesList)
+
+combined_data<-subset(combined_data, domainID!="D20") #Remove domain 20 as they were imaged in Hawaii
+speciesList_inData<-sort(unique(combined_data$scientificName_Species[!grepl("*.sp", combined_data$scientificName_Species)]))
+speciesList_inData<-gsub(r"{\s*\([^\)]+\)}","",as.character(speciesList_inData))
+speciesList_inData<-gsub(" {2,}", " ", speciesList_inData)
+speciesList_inData<-sub("^(\\S*\\s+\\S+).*", "\\1", speciesList_inData)
+speciesList_inData<-gsub("/.*$", "", speciesList_inData)
+
+print("Number of Species in full pinned collection: ")
+length(speciesList_inData)
+
+print("Number of Species imaged: ")
+length(speciesList)
+
+missing_sp <- symdiff(speciesList, speciesList_inData)
+print("Number of Species yet to be imaged: ")
+length(missing_sp)
+```
+
+
+```{r}
+print("Those unimaged species are...")
+combined_data_missingSp<-combined_data %>%
+  filter(scientificName_Species %in% missing_sp)
+sort(table(combined_data_missingSp$scientificName_Species))
+
+hist(table(combined_data_missingSp$scientificName_Species), breaks = 100, main = "Histogram of number of Species Occurence")
+
+print("Number of Species with 1 occurence: ")
+sum(table(table(combined_data_missingSp$scientificName_Species))[1])
+
+```
