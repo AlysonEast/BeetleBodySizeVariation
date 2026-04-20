@@ -360,16 +360,16 @@ ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!
   scale_shape_manual(values=c(16,15,17:25))+
   geom_histogram() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  ylab("Variance (cm)") +
-  facet_wrap(.~scale, scale="free_y") 
+  xlab("Variance (cm)") +
+  facet_wrap(.~scale, scale="free_y", ncol=1) 
 
 ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
        aes(cv2_pct)) +
   theme_pubr() + 
   geom_histogram() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  ylab("Variance (cm)") +
-  facet_wrap(.~scale, scale="free_y")
+  xlab("Variance as % of mean² (CV² × 100)") +
+  facet_wrap(.~scale, scale="free_y", ncol=1)
 
 var_all_scales %>%
   group_by(scale) %>%
@@ -430,6 +430,27 @@ annotate_figure(
 )
 dev.off()
 
+png("./Figures/SynuchusImpunctatusSitePlotNestedDensity.png", height = 5, width = 7, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Site,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Site Density") +
+      facet_wrap(.~siteID, nrow=1),
+    ggplot(data = SYIM_Plot,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Plot Density") +
+      facet_wrap(.~siteID, nrow=1),
+    nrow = 2
+  ),
+  top = text_grob("Synuchus impunctatus")
+)
+dev.off()
+
 ####Calathus advena####
 SYIM_all<-subset(ElytraLengthDF_multi, scientificName=="Calathus advena")
 SYIM_Domain<-SYIM_all
@@ -473,6 +494,109 @@ annotate_figure(
     nrow = 3
   ),
   top = text_grob("Calathus advena")
+)
+dev.off()
+
+####Chlaenius aestivus####
+SYIM_all<-subset(ElytraLengthDF_multi, scientificName=="Chlaenius aestivus")
+SYIM_Domain<-SYIM_all
+SYIM_Site<-SYIM_all
+SYIM_Plot<-SYIM_all
+
+SYIM_all$Level<-"Species"
+SYIM_Domain$Level<-paste0("Domain")
+SYIM_Site$Level<-paste0("Site")
+SYIM_Plot$Level<-paste0("Plot")
+
+SYIM_all$LevelID<-"Species"
+SYIM_Domain$LevelID<-paste0("Domain:",SYIM_Domain$domain_id)
+SYIM_Site$LevelID<-paste0("Domain:",SYIM_Site$domain_id," Site",SYIM_Site$siteID)
+SYIM_Plot$LevelID<-paste0("Domain:",SYIM_Plot$domain_id," Plot",SYIM_Plot$plotID)
+table(SYIM_Plot$LevelID)
+
+SYIM<-rbind(SYIM_Domain,SYIM_Site,SYIM_Plot)
+
+png("./Figures/ChlaeniusAestivusNestedDensity.png", height = 9, width = 7, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm, fill = LevelID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Site,
+           aes(x=dist_cm, fill = siteID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Site Density") +
+      facet_wrap(.~domain_id),
+    ggplot(data = SYIM_Plot,
+           aes(x=dist_cm, fill = LevelID, color = siteID)) +
+      geom_density(alpha=0.5) +
+      theme(legend.position="none") +
+      ylab("Plot Density") +
+      facet_wrap(.~domain_id),
+    nrow = 3
+  ),
+  top = text_grob("Chlaenius aestivus")
+)
+dev.off()
+
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm)) +
+      geom_density(alpha=0.5, aes(fill=siteID)) +
+      geom_density(alpha=0.5, fill="black") +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~domain_id),
+    nrow = 1
+  ),
+  top = text_grob("Chlaenius aestivus")
+)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm)) +
+      geom_density(alpha=0.5, aes(fill=plotID, col=plotID)) +
+      geom_density(alpha=0.5, fill="black") +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~siteID),
+    nrow = 1
+  ),
+  top = text_grob("Chlaenius aestivus")
+)
+
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm)) +
+      geom_density(alpha=0.5, fill="black") +
+      geom_histogram(alpha=0.5, position = "identity", aes(fill=plotID, col=plotID)) +
+      theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~siteID),
+    nrow = 1
+  ),
+  top = text_grob("Chlaenius aestivus")
+)
+
+png("./Figures/ChlaeniusAestivusSitePlotNestedDensity.png", height = 6, width = 12, units = "in", res = 300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = SYIM_Domain,
+           aes(x=dist_cm)) +
+      geom_density(alpha=0.5, position = "identity", aes(fill=plotID, col=plotID)) +
+      geom_density(alpha=0.5, fill="black") +
+      #theme(legend.position="none") +
+      ylab("Domain Density") +
+      facet_wrap(.~siteID),
+    nrow = 1
+  ),
+  top = text_grob("Chlaenius aestivus")
 )
 dev.off()
 
