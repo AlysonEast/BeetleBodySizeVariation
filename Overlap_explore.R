@@ -7,7 +7,7 @@ library(dplyr)
 library(ggrepel)
 
 getwd()
-#setwd("/home/aly/Beetles/BeetleBodySizeVariation")
+setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 df<-read.csv("./BeetleMeasurements.csv")
 meta<-read.csv("./NEON_Field_Site_Metadata_20260130.csv")
 puum<-read.csv("./trait_annotations.csv")
@@ -36,8 +36,9 @@ site_order <- unique(ElytraLength[order(ElytraLength$latitude, decreasing = TRUE
 
 # Convert siteID into a factor with the correct order
 ElytraLength$siteID <- factor(ElytraLength$siteID, levels = site_order)
+ElytraLength$log_dist_cm<-log10(ElytraLength$dist_cm)
 
-ggplot(data = ElytraLength, aes(x=dist_cm, fill = scientificName)) +
+ggplot(data = ElytraLength, aes(x=log_dist_cm, fill = scientificName)) +
   geom_density(alpha=0.5) +
   theme(legend.position="none") +
   facet_wrap(.~siteID, scales = "free_y")
@@ -69,11 +70,11 @@ table(subset(ElytraLength, siteID=="MLBS")$plotID)
 
 library(ggpubr)
 ggarrange(nrow=2,
-  ggplot(data = subset(ElytraLength, siteID=="STER"), aes(x=dist_cm, fill = scientificName)) +
+  ggplot(data = subset(ElytraLength, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName)) +
     geom_density(alpha=0.5) +
   #  theme(legend.position="none") +
     facet_wrap(.~siteID, scales = "free_y"),
-  ggplot(data = subset(ElytraLength, siteID=="STER"), aes(x=dist_cm, fill = scientificName)) +
+  ggplot(data = subset(ElytraLength, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName)) +
     geom_density(alpha=0.5) +
   #  theme(legend.position="0") +
     facet_wrap(.~plotID, scales = "free_y")
@@ -845,6 +846,23 @@ ggplot() +
     x = NULL,
     y = NULL
   )
+
+#### Species means
+ggplot(data = ElytraLength, aes(x=log10(dist_cm), fill = scientificName)) +
+     geom_histogram() + 
+     theme(legend.position="none") 
+
+ElytraMean<- ElytraLength %>%
+  group_by(scientificName) %>%
+  summarise(
+    n_obs = n(),
+    mean_dist = mean(dist_cm, na.rm = TRUE),
+    var_dist = var(dist_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+ggplot(data = ElytraMean, aes(x=log10(mean_dist))) +
+  geom_histogram() + 
+  theme(legend.position="none") 
 
 #### PUUM Explore ####
 # Load the beetle data from NEON API using the 'neonUtilities' package
