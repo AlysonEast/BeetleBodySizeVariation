@@ -97,6 +97,259 @@ ggarrange(nrow=2,
 table(subset(ElytraLength, siteID=="STER")$scientificName)
 table(subset(ElytraLength, plotID=="STER_006")$scientificName)
 
+#### 
+ElytraLength$Spp_plot<-paste0(ElytraLength$scientificName, ElytraLength$plotID)
+forPlot<-subset(ElytraLength, domain_id=="D01")
+forPlot<-subset(forPlot, scientificName=="Carabus goryi"|
+                scientificName=="Cymindis neglecta"|
+                scientificName=="Pterostichus pensylvanicus"|
+                scientificName=="Pterostichus tristis"|
+                scientificName=="Sphaeroderus stenostomus"|
+                scientificName=="Synuchus impunctatus")
+forPlot$scientificName <- factor(
+  forPlot$scientificName,
+  levels = c("Cymindis neglecta",
+             "Pterostichus pensylvanicus",
+             "Pterostichus tristis",
+             "Synuchus impunctatus",
+             "Sphaeroderus stenostomus",
+             "Carabus goryi"), ordered = TRUE)
+table(forPlot$Spp_plot)
+ggarrange(nrow=1,
+          ggplot(data = forPlot, aes(x=dist_cm, fill = Spp_plot)) +
+            geom_density(alpha=0.5) +
+            scale_fill_manual(values=c(rep("#028A9B",3), 
+                                        rep("#BFA194",5), 
+                                        rep("#F8CF9B",4),
+                                        rep("#757943",1),
+                                        rep("#DE5A5A",1),
+                                        rep("#BF3F76",16))) +
+            #xlim(0.4,1.6) +
+            facet_wrap(.~scientificName, ncol = 1) +
+            theme_pubr() +
+            theme(legend.position="none"),
+          ggplot(data = forPlot, aes(x=dist_cm, fill = Spp_plot, colour = Spp_plot)) +
+            geom_density(alpha=.5, position="stack") +
+            scale_fill_manual(values=c(rep("#028A9B",3), 
+                                       rep("#BFA194",5), 
+                                       rep("#F8CF9B",4),
+                                       rep("#757943",1),
+                                       rep("#DE5A5A",1),
+                                       rep("#BF3F76",16))) +
+            scale_color_manual(values=c("black",rep("#028A9B",2), 
+                                        "black",rep("#BFA194",4), 
+                                        "black",rep("#F8CF9B",3),
+                                        rep("black",1),
+                                        rep("black",1),
+                                        "black",rep("#BF3F76",15))) +
+            #xlim(0.4,1.6) +
+            facet_wrap(.~scientificName, scales = "free_y", ncol = 1) +
+            theme_pubr() +
+            theme(legend.position="none"),
+          ggplot(data = forPlot, aes(x=dist_cm, fill = Spp_plot)) +
+            geom_density(alpha=.5, position="stack", col="#00000000") +
+            scale_fill_manual(values=c(rep("#028A9B",3), 
+                                       rep("#BFA194",5), 
+                                       rep("#F8CF9B",4),
+                                       rep("#757943",1),
+                                       rep("#DE5A5A",1),
+                                       rep("#BF3F76",16))) +
+            scale_color_manual(values=c(rep("#028A9B",3), 
+                                        rep("#BFA194",5), 
+                                        rep("#F8CF9B",4),
+                                        rep("#757943",1),
+                                        rep("#DE5A5A",1),
+                                        rep("#BF3F76",16))) +
+            #xlim(0.4,1.6) +
+            facet_wrap(.~siteID, ncol = 1) +
+            theme_pubr() +
+            theme(legend.position="none")
+          )
+
+#D07
+forPlot<-subset(ElytraLength, domain_id=="D10")
+table(forPlot$scientificName, forPlot$siteID)[,12:14]
+table(forPlot$scientificName, forPlot$plotID)
+forPlot$scientificName <- factor(
+  forPlot$scientificName,
+  levels = c("Axinopalpus biplagiatus",
+             "Discoderus parallelus",
+             "Euryderus grossus",
+             "Selenophorus planipennis",
+             "Pasimachus elongatus",
+             "Cratacanthus dubius",
+             "Amara carinata",
+             "Anisodactylus rusticus",
+             "Cicindela punctulata",
+             "Cyclotrachelus torvus",
+             "Harpalus caliginosus",
+             "Harpalus desertus",
+             "Harpalus paratus",
+             "Harpalus pensylvanicus",
+             "Poecilus scitulus",
+             "Pterostichus protractus",
+             "Pterostichus restrictus",
+             "Calathus advena"), ordered = TRUE)
+table(forPlot$Spp_plot)
+
+png("./Figures/TPDexample.png", units = "in", res = 300, height = 9, width = 11)
+annotate_figure(
+  ggarrange(nrow=1,
+          ggplot(data = forPlot, aes(x=dist_cm, fill = Spp_plot)) +
+            geom_density(alpha=0.5) +
+            scale_fill_manual(values=c(rep("#1B9E77",3),
+                                       rep("#D95F02",2),
+                                       rep("#7570B3",1),
+                                       rep("#E7298A",4),
+                                       rep("#66A61E",1),
+                                       rep("#E6AB02",9),
+                                       rep("#A6761D",1),
+                                       rep("#666666",3),
+                                       rep("#1F78B4",2),
+                                       rep("#B2DF8A",2),
+                                       rep("#FB9A99",1),
+                                       rep("#CAB2D6",3),
+                                       rep("#FDBF6F",3),
+                                       rep("#6A3D9A",4),
+                                       rep("#B15928",1),
+                                       rep("#17BECF",4),
+                                       rep("#9B2F5D",2),
+                                       rep("#2E8B57",2))) +
+            #xlim(0.4,1.6) +
+            facet_wrap(.~scientificName, ncol = 1, scales = "free_y") +
+            theme_pubr() +
+            scale_x_continuous(expand = c(0,0))+
+            scale_y_continuous(expand = expansion(add = c(0, 0.5)))+
+            theme(legend.position="none") +
+            theme(strip.background = element_blank(), # Removes the background box
+                  strip.text = element_blank(),        # Removes the text
+                  axis.title.y = element_blank(),
+                  axis.text.y = element_blank(),
+                  axis.title.x = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.line.y = element_blank()
+                  ),
+          ggplot(data = forPlot, aes(x=dist_cm, fill = Spp_plot, colour = Spp_plot)) +
+            geom_density(alpha=.5, position="stack") +
+            scale_fill_manual(values=c(rep("#1B9E77",3),
+                                       rep("#D95F02",2),
+                                       rep("#7570B3",1),
+                                       rep("#E7298A",4),
+                                       rep("#66A61E",1),
+                                       rep("#E6AB02",9),
+                                       rep("#A6761D",1),
+                                       rep("#666666",3),
+                                       rep("#1F78B4",2),
+                                       rep("#B2DF8A",2),
+                                       rep("#FB9A99",1),
+                                       rep("#CAB2D6",3),
+                                       rep("#FDBF6F",3),
+                                       rep("#6A3D9A",4),
+                                       rep("#B15928",1),
+                                       rep("#17BECF",4),
+                                       rep("#9B2F5D",2),
+                                       rep("#2E8B57",2))) +
+            scale_color_manual(values=c("black",rep("#1B9E77",2),
+                                        "black",rep("#D95F02",1),
+                                        rep("black",1),
+                                        "black",rep("#E7298A",3),
+                                        rep("black",1),
+                                        "black",rep("#E6AB02",8),
+                                        rep("black",1),
+                                        "black",rep("#666666",2),
+                                        "black",rep("#1F78B4",1),
+                                        "black",rep("#B2DF8A",1),
+                                        rep("black",1),
+                                        "black",rep("#CAB2D6",2),
+                                        "black",rep("#FDBF6F",2),
+                                        "black",rep("#6A3D9A",3),
+                                        rep("black",1),
+                                        "black",rep("#17BECF",3),
+                                        "black",rep("#9B2F5D",1),
+                                        "black",rep("#2E8B57",1))) +
+            #xlim(0.4,1.6) +
+            facet_wrap(.~scientificName, scales = "free_y", ncol = 1) +
+            theme_pubr() +
+            scale_x_continuous(expand = c(0,0))+
+            scale_y_continuous(expand = expansion(add = c(0, 0.5)))+
+            theme(legend.position="none") +
+            theme(strip.background = element_blank(), # Removes the background box
+                  strip.text = element_blank(),        # Removes the text
+                  axis.title.y = element_blank(),
+                  axis.text.y = element_blank(),
+                  axis.title.x = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.line.y = element_blank()
+            ),
+          ggplot(data = forPlot, aes(x=dist_cm, fill = Spp_plot)) +
+            geom_density(position="stack", linewidth = 1.5, aes(x=dist_cm, colour = siteID))  +
+            geom_density(position="stack", col="#00000000")  +
+            scale_fill_manual(values=c(rep("#8DCEBB",3),
+                                       rep("#ECAF80",2),
+                                       rep("#BAB8D9",1),
+                                       rep("#F394C4",4),
+                                       rep("#B2D28E",1),
+                                       rep("#F2D580",9),
+                                       rep("#D2BA8E",1),
+                                       rep("#B2B2B2",3),
+                                       rep("#8FBCDA",2),
+                                       rep("#D8EFC4",2),
+                                       rep("#FDCCCC",1),
+                                       rep("#E4D8EA",3),
+                                       rep("#FEDFB7",3),
+                                       rep("#B49ECC",4),
+                                       rep("#D8AC94",1),
+                                       rep("#8BDEE7",4),
+                                       rep("#CD97AE",2),
+                                       rep("#96C5AB",2))) +
+            scale_color_manual(values=c(rep("#AA3377",1),
+                                        rep("#4477AA",1),
+                                        rep("#CCBB44",1))) +
+            #xlim(0.4,1.6) +
+            facet_wrap(.~siteID, ncol = 1) +
+            theme_pubr() +
+            xlab("Elytra Length (cm)") +
+            scale_x_continuous(expand = c(0,0))+
+            scale_y_continuous(expand = expansion(add = c(0, 0.5)))+
+            theme(legend.position="none") +
+            theme(strip.background = element_blank(), # Removes the background box
+                  strip.text = element_blank(),        # Removes the text
+                  axis.title.y = element_blank(),
+                  axis.title.x = element_blank(),
+                  axis.text.y = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.line.y = element_blank()
+                  )
+          ),
+  bottom = text_grob("Elytra Length (cm)", color = "black", size = 14))
+dev.off()
+
+forPlot$plotSpp<-paste0(forPlot$plotID,forPlot$scientificName)
+table(forPlot$plotSpp)
+forPlot$plotSpp<-sort(forPlot$plotSpp, decreasing = FALSE)
+
+png("./Figures/TPDexampleDomain.png", units = "in", res = 300, height = 4, width = 4)
+ggplot(data = forPlot, aes(x=dist_cm, fill = plotSpp, color=plotSpp)) +
+  geom_density(position="stack", alpha = 0.5, aes(x=dist_cm))  +
+  scale_fill_manual(values=c(rep("#AA3377",12),
+                             rep("#CCBB44",10),
+                             rep("#4477AA",26))) +
+  scale_color_manual(values=c("black",rep("#00000000",(12+10+25)))) +
+  #xlim(0.4,1.6) +
+  theme_pubr() +
+  scale_x_continuous(expand = c(0,0))+
+  scale_y_continuous(expand = expansion(add = c(0, 0.5)))+
+  theme(legend.position="none") +
+  theme(strip.background = element_blank(), # Removes the background box
+        strip.text = element_blank(),        # Removes the text
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank()
+  )
+dev.off()
+
 #### Overlap Stats ####
 library(Ostats)
 
