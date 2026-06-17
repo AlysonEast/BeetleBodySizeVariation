@@ -6,60 +6,275 @@ library(parameters)
 library(diptest)
 library(moments)
 
-df<-read.csv("/home/aly/Downloads/1ykzeqat.csv")
+#User defined variables#
+cutoff<-50
+#
 
-df <- df %>%
-  # Split the single column into 8 numeric columns
-  separate(pred_coords_px,
-           into = paste0("v", 1:8),
-           sep = "[, ]+",   # handles comma or space separated
-           convert = TRUE) %>%
-  # Compute distance using first four values
-  mutate(
-    width = sqrt((v3 - v1)^2 + (v4 - v2)^2)
-  ) %>%
-  # Compute distance using second four values
-  mutate(
-    length = sqrt((v7 - v5)^2 + (v8 - v6)^2)
-  )
+setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
-sp_count <- df %>%
+df<-read.csv("./Data/beetle_lengths_cm_reviewed_clean.csv")
+allInd<-read.csv("./Data/allIndividuals.csv")
+
+head(df)
+
+# df <- df %>%
+#   # Split the single column into 8 numeric columns
+#   separate(pred_coords_px,
+#            into = paste0("v", 1:8),
+#            sep = "[, ]+",   # handles comma or space separated
+#            convert = TRUE) %>%
+#   # Compute distance using first four values
+#   mutate(
+#     width = sqrt((v3 - v1)^2 + (v4 - v2)^2)
+#   ) %>%
+#   # Compute distance using second four values
+#   mutate(
+#     length = sqrt((v7 - v5)^2 + (v8 - v6)^2)
+#   )
+
+head(df)
+str(df)
+biorepo<-merge(df, allInd, by.x="beetle_id", by.y = "individualID", all.x = TRUE)
+table(biorepo$flag)
+biorepo<-subset(biorepo, is.na(flag))
+
+#Update with new data, this is data specific. 
+biorepo <- biorepo %>% 
+  group_by(beetle_id) %>% 
+  slice_head(n = 1) %>% 
+  ungroup()
+
+biorepo$cm_elytra_max_length<-biorepo$length_cm
+
+#
+
+biorepo$individualID<-biorepo$beetle_id
+biorepo$datasource<-"Biorepo"
+
+sp_count <- biorepo %>%
   group_by(scientific_name) %>%
   summarise(n = n()) %>%
   ungroup()
 
 #Add in Beetlepalooza annotations
-getwd()
-setwd("/home/aly/Beetles/BeetleBodySizeVariation")
-paloozadf<-read.csv("./BeetleMeasurements.csv")
-meta<-read.csv("./NEON_Field_Site_Metadata_20260130.csv")
+paloozadf<-read.csv("./Data/BeetleMeasurements.csv")
+meta<-read.csv("./Data/NEON_Field_Site_Metadata_20260130.csv")
 
 paloozadf<-merge(paloozadf, meta, by.x="siteID", by.y="site_id", all.x=TRUE)
 df_sub<-subset(paloozadf, user_name=="IsaFluck")
+
 ElytraLength<-subset(df_sub, structure=="ElytraLength")
+colnames(ElytraLength)
+ElytraLength$cm_elytra_max_length<-ElytraLength$dist_cm
+ElytraLength$datasource<-"Beetle Palooza"
+head(ElytraLength)
+
+library(tidyr)
+library(dplyr)
+library(stringr)
+
+ElytraLength <- ElytraLength %>%
+  mutate(
+    sample_date = str_extract(NEON_sampleID, "\\d{8}"),
+    collectDate = as.Date(sample_date, format = "%Y%m%d"),
+    yearCollected = as.integer(substr(sample_date, 1, 4))
+  )
+#Add in Hawaii data ####
+HI<-read.csv("./Data/trait_annotations.csv")
+colnames(HI)
+HI$datasource<-"PUUM"
+
+#### Load NEON Token and Data Product ####
+# Read NEON token from file
+neon_token <- read.delim("~/NEON_TOKEN", header = FALSE)[1, 1]
+Beetle_dpID <- "DP1.10022.001"
+
+# If already combined data exists, load it, else fetch and combine
+if (file.exists("./Data/NEON_ExpertParaCombined.csv")) {
+  combined_data <- read.csv("./Data/NEON_ExpertParaCombined.csv")
+} else {
+  neon_df <- neonUtilities::loadByProduct(
+    dpID = Beetle_dpID,
+    token = neon_token,
+    site = "PUUM",
+    include.provisional = FALSE,
+    check.size = FALSE
+  )
+  
+  neon_para <- neon_df$bet_parataxonomistID
+  neon_expert <- neon_df$bet_expertTaxonomistIDProcessed
+  
+  neon_para_clean <- neon_para %>%
+    filter(!(individualID %in% neon_expert$individualID))
+  
+  common_cols <- intersect(names(neon_para_clean), names(neon_expert))
+  neon_para_common <- neon_para_clean[, common_cols]
+  neon_expert_common <- neon_expert[, common_cols]
+  
+  neon_para_common$ID_status <- "Para"
+  neon_expert_common$ID_status <- "Expert"
+  
+  combined_data <- bind_rows(neon_para_common, neon_expert_common)
+  combined_data$numbericID <- as.numeric(substr(combined_data$individualID, 
+                                                (nchar(combined_data$individualID) - 5), 
+                                                nchar(combined_data$individualID)))
+  
+  write.csv(combined_data, "./Data/NEON_ExpertParaCombined.csv", row.names = FALSE)
+}
+
+if (file.exists("./Data/NEON_ExpertParaCombined_Prelim.csv")) {
+  combined_data_prelim <- read.csv("./Data/NEON_ExpertParaCombined_Prelim.csv")
+} else {
+  neon_df <- neonUtilities::loadByProduct(
+    dpID = Beetle_dpID,
+    token = neon_token,
+    include.provisional = TRUE,
+    site = "PUUM",
+    check.size = FALSE
+  )
+  
+  neon_para <- neon_df$bet_parataxonomistID
+  neon_expert <- neon_df$bet_expertTaxonomistIDProcessed
+  
+  neon_para_clean <- neon_para %>%
+    filter(!(individualID %in% neon_expert$individualID))
+  
+  common_cols <- intersect(names(neon_para_clean), names(neon_expert))
+  neon_para_common <- neon_para_clean[, common_cols]
+  neon_expert_common <- neon_expert[, common_cols]
+  
+  neon_para_common$ID_status <- "Para"
+  neon_expert_common$ID_status <- "Expert"
+  
+  combined_data_prelim <- bind_rows(neon_para_common, neon_expert_common)
+  combined_data_prelim$numbericID <- as.numeric(substr(combined_data_prelim$individualID, 
+                                                       (nchar(combined_data_prelim$individualID) - 5), 
+                                                       nchar(combined_data_prelim$individualID)))
+  
+  write.csv(combined_data_prelim, "./Data/NEON_ExpertParaCombined_Prelim.csv", row.names = FALSE)
+}
+
+combined_data_prelim<-subset(combined_data_prelim, release=="PROVISIONAL")
+
+dim(combined_data)
+combined_data<-rbind(combined_data, combined_data_prelim)
+dim(combined_data)
+
+# Add year to combined_data
+combined_data$yearCollected <- as.numeric(substr(combined_data$collectDate, 1, 4))
+
+# Extract genus and species only from scientific name
+combined_data$scientificName_Species<-gsub(r"{\s*\([^\)]+\)}","",as.character(combined_data$scientificName))
+combined_data$scientificName_Species<-gsub(" {2,}", " ", combined_data$scientificName_Species)
+combined_data$scientificName_Species<-sub("^(\\S*\\s+\\S+).*", "\\1", combined_data$scientificName_Species)
+
+combined_data$scientificName_Species <-
+  gsub("/.*$", "", combined_data$scientificName_Species)
+
+#Add metadata to PUUM dataset
+HI_meta<-merge(HI, combined_data, by="individualID", all.x = TRUE)
+
+# Merge all data
+EL_harm <- ElytraLength %>%
+  transmute(
+    datasource,
+    siteID,
+    plotID,
+    domainID = domain_id,
+    individualID = combinedID,   # probably better than NEON_sampleID
+    sampleID = NEON_sampleID,
+    scientificName,
+    collectDate,
+    yearCollected,
+    imageID = pictureID,
+    cm_elytra_max_length,
+    latitude
+  )
+
+HI_harm <- HI_meta %>%
+  transmute(
+    datasource,
+    siteID,
+    plotID,
+    domainID,
+    individualID,
+    scientificName,
+    imageID = groupImageFilePath,
+    px_scalebar,
+    cm_scalebar,
+    px_elytra_max_length,
+    cm_elytra_max_length,
+    yearCollected
+  )
+
+biorepo_harm  <- biorepo %>%
+  transmute(
+    datasource,
+    siteID,
+    plotID,
+    domainID,
+    individualID,
+    scientificName,
+    imageID,
+    px_scalebar = NA, ##Update!!!!
+    cm_scalebar = NA, ##Update!!!!
+    px_elytra_max_length = NA, ##Update!!!!
+    cm_elytra_max_length,
+    yearCollected
+  )
+
+#Add in biorepo
+
+all_elytra <- bind_rows(EL_harm, HI_harm, biorepo_harm)
+all_elytra<-subset(all_elytra, !cm_elytra_max_length<=0)
+
+# Extract genus and species only from scientific name
+all_elytra$scientificName_Species<-gsub(r"{\s*\([^\)]+\)}","",as.character(all_elytra$scientificName))
+all_elytra$scientificName_Species<-gsub(" {2,}", " ", all_elytra$scientificName_Species)
+all_elytra$scientificName_Species<-sub("^(\\S*\\s+\\S+).*", "\\1", all_elytra$scientificName_Species)
+
+all_elytra$scientificName_Species <-
+  gsub("/.*$", "", all_elytra$scientificName_Species)
+
+all_elytra<-subset(all_elytra, !is.na(scientificName_Species))
 
 #Distribution of Mean Body Size in Carabids####
-ElytraSummary<- ElytraLength %>%
-  group_by(scientificName) %>%
+ElytraSummary<- all_elytra %>%
+  group_by(scientificName_Species) %>%
   summarise(
     n_obs = n(),
-    mean_dist = mean(dist_cm, na.rm = TRUE),
-    var_dist = var(dist_cm, na.rm = TRUE),
-    skew = skewness(dist_cm, na.rm = TRUE),
-    kurtosis = kurtosis(dist_cm, na.rm = TRUE),
-    dstat = dip.test(dist_cm)[1],
-    dpval = dip.test(dist_cm)[2],
+    mean_dist = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_dist = var(cm_elytra_max_length, na.rm = TRUE),
+    skew = skewness(cm_elytra_max_length, na.rm = TRUE),
+    kurtosis = kurtosis(cm_elytra_max_length, na.rm = TRUE),
+    dstat = dip.test(cm_elytra_max_length)[1],
+    dpval = dip.test(cm_elytra_max_length)[2],
     .groups = "drop"
   )
 
-ggplot(data = ElytraSummary, aes(x=log10(mean_dist))) +
-  geom_histogram() + 
-  theme(legend.position="none") 
+ElytraSummary <- ElytraSummary %>%
+  filter(!grepl("sp\\.", scientificName_Species))
 
+table(ElytraSummary$scientificName_Species)
+
+png("./Figures/BodySizeQuantification/AllBodySizeDist.png", units = "in", width = 6, height = 4, res=300)
+ggarrange(ggplot(data = ElytraSummary, aes(x=mean_dist)) +
+            geom_histogram() +
+            theme_pubr() +
+            xlab("Species Mean Bodysize (cm)") +
+            theme(legend.position="none"),
+          ggplot(data = ElytraSummary, aes(x=log10(mean_dist))) +
+            geom_histogram() +
+            theme_pubr() +
+            xlab("log10(Species Mean Bodysize (cm))") +
+            theme(legend.position="none"),
+          nrow=1)
+dev.off()
 #ITV###
 #What is the shape of distributions?####
-ElytraSummary_n<-subset(ElytraSummary, n_obs>=20)
+ElytraSummary_n<-subset(ElytraSummary, n_obs>=cutoff)
 #Skewness#
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Skew.png", units = "in", width = 6, height = 5, res=300)
 ggplot(data = ElytraSummary_n, aes(skew)) +
   geom_histogram() + 
   theme(legend.position="none") +
@@ -68,78 +283,188 @@ ggplot(data = ElytraSummary_n, aes(skew)) +
   geom_vline(xintercept = -2) +
   geom_vline(xintercept = 1) +
   geom_vline(xintercept = 2) +
-  annotate("text", x = 0, y = 15, label = "Normal", angle = 90, vjust = -0.5) +
-  annotate("text", x = -1, y = 15, label = "left-skewed", angle = 90, vjust = -0.5) +
-  annotate("text", x = 1, y = 15, label = "right-skewed", angle = -90, vjust = -0.5) +
-  annotate("text", x = 2, y = 15, label = "Exponential right-skewed", angle = -90, vjust = -0.5)+
-  annotate("text", x = -2, y = 15, label = "Exponential left-skewed", angle = 90, vjust = -0.5)
+  annotate("text", x = 0, y = 40, label = "Normal", angle = 90, vjust = -0.5) +
+  annotate("text", x = -1, y = 40, label = "left-skewed", angle = 90, vjust = -0.5) +
+  annotate("text", x = 1, y = 40, label = "right-skewed", angle = -90, vjust = -0.5) +
+  annotate("text", x = 2, y = 40, label = "Exponential right-skewed", angle = -90, vjust = -0.5)+
+  annotate("text", x = -2, y = 40, label = "Exponential left-skewed", angle = 90, vjust = -0.5) +
+  theme_pubr() +
+  labs(title = "Skew of Body Size Distribution",
+       subtitle = "Species Level",
+       x = "Skew",
+       y = "Count of Species",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+dev.off()
 
 print(paste0("left-skewed: n = ", nrow(subset(ElytraSummary_n,skew > 1))))
 
 print(paste0("right-skewed: n = ", nrow(subset(ElytraSummary_n,skew < -1))))
 
 #Kurtosis#
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
 ggplot(data = ElytraSummary_n, aes(kurtosis)) +
   geom_histogram() +
   geom_vline(xintercept = 0) +
   annotate("text", x = 0, y = 15, label = "Peaked", angle = -90, vjust = -0.5) +
-  annotate("text", x = 0, y = 15, label = "Flattened", angle = 90, vjust = -0.5) 
+  annotate("text", x = 0, y = 15, label = "Flattened", angle = 90, vjust = -0.5) +
+  theme_pubr() +
+  labs(title = "Kurtosis of Body Size Distribution",
+       subtitle = "Species Level",
+       x = "Kurtosis",
+       y = "Count of Species",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+dev.off()
 
-#Modality#
+#Modality
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Modality.png", units = "in", width = 6, height = 5, res=300)
 ggplot(data = ElytraSummary_n, aes(as.numeric(dpval))) +
   geom_histogram() +
   geom_vline(xintercept = 0.05) +
   annotate("text", x = 0.05, y = 15, label = "Multimodal", angle = 90, vjust = -0.5)+
-  annotate("text", x = 0.05, y = 15, label = "Unimodial", angle = -90, vjust = -0.5)
+  annotate("text", x = 0.05, y = 15, label = "Unimodial", angle = -90, vjust = -0.5) +
+  theme_pubr() +
+  labs(title = "Modality of Body Size Distribution",
+       subtitle = "Species Level",
+       x = "Dip Test P-value",
+       y = "Count of Species",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+dev.off()
+
 
 print(paste0("Unimodal Distributions: n = ", nrow(subset(ElytraSummary_n,dpval>=0.05))))
   
 print(paste0("Multimodal Distributions: n = ", nrow(subset(ElytraSummary_n,dpval<=0.05))))
+subset(ElytraSummary_n,dpval<=0.05)
 
 #Variance across Scales ####
-head(ElytraLength)
-species_stats <- ElytraLength %>%
-  group_by(scientificName) %>%
+head(all_elytra)
+
+species_stats <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_dist_cm = mean(dist_cm, na.rm = TRUE),
-    var_dist_cm  = var(dist_cm, na.rm = TRUE),
-    sd_dist_cm   = sd(dist_cm, na.rm = TRUE)
+    mean_cm_elytra_max_length = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm_elytra_max_length  = var(cm_elytra_max_length, na.rm = TRUE),
+    sd_cm_elytra_max_length   = sd(cm_elytra_max_length, na.rm = TRUE),
+    skew = skewness(cm_elytra_max_length, na.rm = TRUE),
+    kurtosis = kurtosis(cm_elytra_max_length, na.rm = TRUE),
+    dstat = dip.test(cm_elytra_max_length)[1],
+    dpval = dip.test(cm_elytra_max_length)[2]
   ) %>%
   ungroup()
 
-species_site_stats <- ElytraLength %>%
-  group_by(siteID, scientificName) %>%
+species_plot_stats <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(plotID, scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_dist_cm = mean(dist_cm, na.rm = TRUE),
-    var_dist_cm  = var(dist_cm, na.rm = TRUE),
-    sd_dist_cm   = sd(dist_cm, na.rm = TRUE)
+    mean_cm_elytra_max_length = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm_elytra_max_length  = var(cm_elytra_max_length, na.rm = TRUE),
+    sd_cm_elytra_max_length   = sd(cm_elytra_max_length, na.rm = TRUE),
+    skew = skewness(cm_elytra_max_length, na.rm = TRUE),
+    kurtosis = kurtosis(cm_elytra_max_length, na.rm = TRUE),
+    dstat = dip.test(cm_elytra_max_length)[1],
+    dpval = dip.test(cm_elytra_max_length)[2]
   ) %>%
   ungroup()
 
-species_domain_stats <- ElytraLength %>%
-  group_by(domain_id, scientificName) %>%
+species_site_stats <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(siteID, scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_dist_cm = mean(dist_cm, na.rm = TRUE),
-    var_dist_cm  = var(dist_cm, na.rm = TRUE),
-    sd_dist_cm   = sd(dist_cm, na.rm = TRUE)
+    mean_cm_elytra_max_length = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm_elytra_max_length  = var(cm_elytra_max_length, na.rm = TRUE),
+    sd_cm_elytra_max_length   = sd(cm_elytra_max_length, na.rm = TRUE),
+    skew = skewness(cm_elytra_max_length, na.rm = TRUE),
+    kurtosis = kurtosis(cm_elytra_max_length, na.rm = TRUE),
+    dstat = dip.test(cm_elytra_max_length)[1],
+    dpval = dip.test(cm_elytra_max_length)[2]
   ) %>%
   ungroup()
 
-ggplot(ElytraLength, aes(scientificName, log10(dist_cm))) +
+species_domain_stats <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(domainID, scientificName_Species) %>%
+  summarise(
+    n = n(),
+    mean_cm_elytra_max_length = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm_elytra_max_length  = var(cm_elytra_max_length, na.rm = TRUE),
+    sd_cm_elytra_max_length   = sd(cm_elytra_max_length, na.rm = TRUE),
+    skew = skewness(cm_elytra_max_length, na.rm = TRUE),
+    kurtosis = kurtosis(cm_elytra_max_length, na.rm = TRUE),
+    dstat = dip.test(cm_elytra_max_length)[1],
+    dpval = dip.test(cm_elytra_max_length)[2]
+  ) %>%
+  ungroup()
+
+
+# png("./Figures/BodySizeQuantification/SpeciesDistribution_Skew.png", units = "in", width = 6, height = 5, res=300)
+ggplot(data = subset(species_plot_stats, n>=cutoff), aes(skew)) +
+  geom_histogram() + 
+  theme(legend.position="none") +
+  geom_vline(xintercept = 0) +
+  geom_vline(xintercept = -1) +
+  geom_vline(xintercept = -2) +
+  geom_vline(xintercept = 1) +
+  geom_vline(xintercept = 2) +
+  annotate("text", x = 0, y = 40, label = "Normal", angle = 90, vjust = -0.5) +
+  annotate("text", x = -1, y = 40, label = "left-skewed", angle = 90, vjust = -0.5) +
+  annotate("text", x = 1, y = 40, label = "right-skewed", angle = -90, vjust = -0.5) +
+  annotate("text", x = 2, y = 40, label = "Exponential right-skewed", angle = -90, vjust = -0.5)+
+  annotate("text", x = -2, y = 40, label = "Exponential left-skewed", angle = 90, vjust = -0.5) +
+  theme_pubr() +
+  labs(title = "Skew of Body Size Distribution",
+       subtitle = "Species Level",
+       x = "Skew",
+       y = "Count of Species",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+# dev.off()
+# png("./Figures/BodySizeQuantification/SpeciesDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
+ggplot(data = subset(species_plot_stats, n>=cutoff), aes(kurtosis)) +
+  geom_histogram() +
+  geom_vline(xintercept = 0) +
+  annotate("text", x = 0, y = 15, label = "Peaked", angle = -90, vjust = -0.5) +
+  annotate("text", x = 0, y = 15, label = "Flattened", angle = 90, vjust = -0.5) +
+  theme_pubr() +
+  labs(title = "Kurtosis of Body Size Distribution",
+       subtitle = "Species Level",
+       x = "Kurtosis",
+       y = "Count of Species",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+# dev.off()
+
+#Modality
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Modality.png", units = "in", width = 6, height = 5, res=300)
+ggplot(data = subset(species_plot_stats, n>=cutoff), aes(as.numeric(dpval))) +
+  geom_histogram() +
+  geom_vline(xintercept = 0.05) +
+  annotate("text", x = 0.05, y = 15, label = "Multimodal", angle = 90, vjust = -0.5)+
+  annotate("text", x = 0.05, y = 15, label = "Unimodial", angle = -90, vjust = -0.5) +
+  theme_pubr() +
+  labs(title = "Modality of Body Size Distribution",
+       subtitle = "Species Level",
+       x = "Dip Test P-value",
+       y = "Count of Species",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+dev.off()
+
+print(paste0("Multimodal Distributions: n = ", nrow(subset(subset(species_plot_stats, n>=cutoff),dpval<=0.05))))
+subset(subset(species_plot_stats, n>=cutoff),dpval<=0.05)
+
+ggplot(all_elytra, aes(scientificName_Species, log10(cm_elytra_max_length))) +
   geom_boxplot() +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ggplot(species_site_stats,
-       aes(scientificName, mean_dist_cm, color = siteID)) +
+       aes(scientificName_Species, mean_cm_elytra_max_length, color = siteID)) +
   geom_point() +
   geom_errorbar(
     aes(
-      ymin = mean_dist_cm - sd_dist_cm,
-      ymax = mean_dist_cm + sd_dist_cm
+      ymin = mean_cm_elytra_max_length - sd_cm_elytra_max_length,
+      ymax = mean_cm_elytra_max_length + sd_cm_elytra_max_length
     ),
     width = 0
   ) +
@@ -147,76 +472,87 @@ ggplot(species_site_stats,
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
-species_occurrence <- ElytraLength %>%
-  group_by(scientificName) %>%
+species_occurrence <- all_elytra %>%
+  group_by(scientificName_Species) %>%
   summarise(
     n_sites = n_distinct(siteID),
     n_plots = n_distinct(plotID),
     n_obs   = n()
   )
-species_keep <- species_occurrence %>%
-  filter(n_sites > 1, n_plots > 1) %>%
-  pull(scientificName)
+# species_keep <- species_occurrence %>%
+#   filter(n_sites > 1, n_plots > 1) %>%
+#   pull(scientificName_Species)
+# 
+# all_elytraDF_multi <- all_elytra %>%
+#   filter(scientificName_Species %in% species_keep)
 
-ElytraLengthDF_multi <- ElytraLength %>%
-  filter(scientificName %in% species_keep)
-
-species_var <- ElytraLengthDF_multi %>%
-  group_by(scientificName) %>%
+species_var <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_cm = mean(dist_cm, na.rm = TRUE),
-    var_cm  = var(dist_cm, na.rm = TRUE),
+    mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
     ID = "Spp",
     Above = "None",
-    Site = "All",
-    Domain = "All"
+    siteID = "All",
+    domainID = "All",
+    plotID = "All"
   ) %>%
   ungroup()
 
-plot_species_var <- ElytraLengthDF_multi %>%
-  group_by(plotID, scientificName) %>%
+plot_species_var <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(plotID, scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_cm = mean(dist_cm, na.rm = TRUE),
-    var_cm  = var(dist_cm, na.rm = TRUE),
+    mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
     Above = unique(siteID),
-    Site = unique(siteID),
-    Domain = unique(domain_id)
+    siteID = unique(siteID),
+    domainID = unique(domainID),
+    plotID = unique(plotID)
   ) %>% 
   ungroup()
-colnames(plot_species_var)<-c("ID",colnames(plot_species_var)[2:length(colnames(plot_species_var))])
+plot_species_var$ID<-plot_species_var$siteID
+# colnames(plot_species_var)<-c("ID",colnames(plot_species_var)[2:length(colnames(plot_species_var))])
 
-site_species_var <- ElytraLengthDF_multi %>%
-  group_by(siteID, scientificName) %>%
+site_species_var <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(siteID, scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_cm = mean(dist_cm, na.rm = TRUE),
-    var_cm  = var(dist_cm, na.rm = TRUE),
+    mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
-    Above = unique(domain_id),
-    Site = unique(siteID),
-    Domain = unique(domain_id)
+    Above = unique(domainID),
+    siteID = unique(siteID),
+    domainID = unique(domainID),
+    plotID = "All"
   ) %>%
   ungroup()
-colnames(site_species_var)<-c("ID",colnames(site_species_var)[2:length(colnames(site_species_var))])
+site_species_var$ID<-site_species_var$siteID
+# colnames(site_species_var)<-c("ID",colnames(site_species_var)[2:length(colnames(site_species_var))])
 
 
-domain_species_var <- ElytraLengthDF_multi %>%
-  group_by(domain_id, scientificName) %>%
+domain_species_var <- all_elytra %>%
+  filter(!grepl("sp\\.", scientificName_Species)) %>%
+  group_by(domainID, scientificName_Species) %>%
   summarise(
     n = n(),
-    mean_cm = mean(dist_cm, na.rm = TRUE),
-    var_cm  = var(dist_cm, na.rm = TRUE),
+    mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
+    var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
     Above = "Spp",
-    Site = "All",
-    Domain = unique(domain_id)
+    siteID = "All",
+    domainID = unique(domainID),
+    plotID = "All"
   ) %>%
   ungroup()
-colnames(domain_species_var)<-c("ID",colnames(domain_species_var)[2:length(colnames(domain_species_var))])
+domain_species_var$ID<-domain_species_var$domainID
+# colnames(domain_species_var)<-c("ID",colnames(domain_species_var)[2:length(colnames(domain_species_var))])
 
 
 plot_species_var$scale <- "Plot Level"
@@ -224,51 +560,264 @@ species_var$scale <- "Species Level"
 site_species_var$scale <- "Site Level"
 domain_species_var$scale <- "Domain Level"
 
-var_all_scales <- bind_rows(species_var,
-                            plot_species_var,
-                            site_species_var,
-                            domain_species_var)
+list<-plot_species_var %>% filter(n >= cutoff)
+list<-list %>%
+  group_by(scientificName_Species) %>%
+  summarise(
+    n=n()
+  ) %>%
+  ungroup()
+list<-subset(list, n>1)
+list<-unique(list$scientificName_Species)
 
-var_all_scales<-var_all_scales %>% filter(n >= 10)
+var_all_scales <- bind_rows(
+  species_var %>% filter(n >= cutoff),
+  plot_species_var %>%
+    filter(n >= cutoff),
+  site_species_var %>%
+    filter(n >= cutoff),
+  domain_species_var %>%
+    filter(n >= cutoff)
+)
 
 var_all_scales$scale<-factor(
   var_all_scales$scale,
   ordered = TRUE,
   levels = c("Species Level", "Domain Level", "Site Level", "Plot Level"))
 
+dim(var_all_scales)
+var_all_scales <- var_all_scales %>% filter(scientificName_Species %in% list)
+dim(var_all_scales)
+
 head(var_all_scales)
 
-png("./Figures/NestedCVpct.png", height = 10, width = 10, units = "in", res = 300)
-ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
-       aes(scale, cv2_pct, group = scientificName, col = Site, shape = Domain)) +
+summary<-var_all_scales %>%
+  group_by(scale) %>%
+  summarise(
+    n = n(),
+    mean_cvpct = mean(cv2_pct, na.rm = TRUE),
+    lower_ci = t.test(cv2_pct)$conf.int[1],
+    upper_ci = t.test(cv2_pct)$conf.int[2]
+  ) %>%
+  ungroup()
+summary
+
+png("./Figures/BodySizeQuantification/CV_Nested.png", units = "in", width = 7, height = 6, res=300)
+ggplot(var_all_scales,
+       aes(cv2_pct)) +
   theme_pubr() + 
-  scale_shape_manual(values=c(16,15,17:25))+
+  geom_histogram() +
+  geom_vline(data = summary, aes(xintercept = mean_cvpct)) +
+  geom_vline(data = summary, aes(xintercept = lower_ci), linetype="dashed") +
+  geom_vline(data = summary, aes(xintercept = upper_ci), linetype="dashed") +
+  scale_x_continuous(expand = c(0,0), limits = c(0,3), breaks = c(seq(0,3,0.5))) +
+  xlab("Variance as % of mean² (CV² × 100)") +
+  facet_wrap(.~scale, scale="free_y", ncol=1) +
+  theme(legend.position = "None") +
+  labs(title = "Variance in bodysize as % of mean across nested spatial scales",
+       caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
+dev.off()
+
+#png("./Figures/NestedCVpct.png", height = 10, width = 10, units = "in", res = 300)
+ggplot(subset(var_all_scales, scientificName_Species!="Carabidae sp."),
+       aes(scale, cv2_pct, group = scientificName_Species, col = siteID, shape = domainID)) +
+  theme_pubr() + 
+  scale_shape_manual(values=c(16,15,17:25,6:14))+
   geom_point(size = 2) +
-  scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
-                                "#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
-                                "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D", 
-                                "#8A7C64", "#599861")) +
+  # scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
+  #                               "#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
+  #                               "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D", 
+  #                               "#8A7C64", "#599861")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
   ylab("Variance as % of mean² (CV² × 100)") +
-  facet_wrap(.~scientificName) 
+  facet_wrap(.~scientificName_Species, scales = "free_y") +
+  theme(legend.position = "None")
 dev.off()
 
-png("./Figures/NestedVar.png", height = 10, width = 12, units = "in", res = 300)
-ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
-       aes(scale, var_cm, group = scientificName, col = Site, shape = Domain)) +
+#Plots for single species
+ggplot(subset(var_all_scales, scientificName_Species=="Pterostichus lama" | scientificName_Species=="Pterostichus mutus" | 
+                scientificName_Species=="Pterostichus rostratus"),
+       aes(scale, cv2_pct, group = scientificName_Species, col = siteID, shape = domainID)) +
   theme_pubr() + 
   scale_shape_manual(values=c(16,15,17:25))+
-  geom_point(size = 2) +
-  scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
-                                "#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
-                                "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D", 
+  geom_point(size = 4,
+             stroke = 2) +
+  scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7",
+                                "#673770", "#D3D93E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD",
+                                "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D",
                                 "#8A7C64", "#599861")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  ylab("Variance (cm)") +
-  facet_wrap(.~scientificName, scale="free_y") 
+  facet_wrap(.~scientificName_Species) +
+  ylab("Variance as % of mean² (CV² × 100)") # +
+  # theme(legend.position = "None")
+
+sort(table(var_all_scales$scientificName_Species))
+
+species<-"Carabus goryi"
+plotList<-subset(plot_species_var, scientificName_Species==species &
+                   n>=20)
+plotList<-unique(plotList$plotID)
+siteList<-subset(site_species_var, scientificName_Species==species &
+                   n>=20)
+siteList<-unique(siteList$siteID)
+domList<-subset(domain_species_var, scientificName_Species==species &
+                   n>=20)
+domList<-unique(domList$domainID)
+domList<-"D07"
+
+png("./Figures/BodySizeQuantification/SpeciesNestedDensityPlots.png", units = "in", width = 4, height = 10, res=300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = subset(all_elytra, scientificName_Species==species) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill = domainID)) +
+      geom_density(alpha=0.5, fill="#660033") +
+      geom_rug(colour = "#660033") +
+      geom_vline(data = subset(domain_species_var %>%
+                                 filter(domainID %in% domList), 
+                               scientificName_Species==species &
+                                 n>=cutoff),
+                 aes(xintercept = mean_cm),
+                 col="#660033") +
+      ylab("Domain Density") +
+      xlab(NULL) +
+      labs(title=species) +
+      theme_pubr()+
+      theme(legend.position="none"),
+      # facet_wrap(.~domainID),
+    ggplot(data = subset(all_elytra, scientificName_Species==species)%>%
+             filter(siteID %in% siteList) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill = siteID)) +
+      geom_density(alpha=.5) +
+      geom_rug(aes(colour = siteID)) +
+      geom_vline(data = subset(site_species_var, scientificName_Species==species &
+                                 n>=cutoff)%>%
+                   filter(siteID %in% siteList) %>%
+                   filter(domainID %in% domList),
+                 aes(xintercept = mean_cm,
+                     colour = siteID)) +
+      scale_fill_manual(values=c("#006699", "#990000")) +
+      scale_color_manual(values=c("#006699", "#990000")) +
+      ylab("Site Density") +
+      xlab(NULL) +
+      theme_pubr() +
+      theme(legend.position="none"),
+      # facet_wrap(.~domainID),
+    ggplot(data = subset(all_elytra, scientificName_Species==species) %>%
+             filter(plotID %in% plotList) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill= plotID)) +
+      geom_density(alpha=0.2) +
+      geom_rug(aes(colour = plotID)) +
+      geom_vline(data = subset(plot_species_var, scientificName_Species==species &
+                                 n>=cutoff) %>%
+                   filter(plotID %in% plotList) %>%
+                   filter(domainID %in% domList),
+                 aes(xintercept = mean_cm,
+                     color = plotID)) +
+      scale_fill_manual(values=c("#00CCCC", "#009999", "#3399cc",
+                            "#3366cc", "#0000ff", "#33ccff",
+                            "#0099cc", "#0066ff", "#3399ff",
+                            "#660000", "#990000", "#cc3333",
+                            "#ff0000", "#cc3300", "#ff6666",
+                            "#ff6600", "#cc0033", "#fc4e2a",
+                            "#d23428")) +
+      scale_color_manual(values=c("#00CCCC", "#009999", "#3399cc",
+                                 "#3366cc", "#0000ff", "#33ccff",
+                                 "#0099cc", "#0066ff", "#3399ff",
+                                 "#660000", "#990000", "#cc3333",
+                                 "#ff0000", "#cc3300", "#ff6666",
+                                 "#ff6600", "#cc0033", "#fc4e2a",
+                                 "#d23428")) +
+      ylab("Plot Density") +
+      xlab("Elytra Length (cm)") +
+      theme_pubr()+
+      theme(legend.position="none"),
+      # facet_wrap(.~domainID),
+    nrow = 3
+  )
+)
 dev.off()
 
-ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
+png("./Figures/BodySizeQuantification/SpeciesNestedWrappedDensityPlots.png", units = "in", width = 8, height = 6, res=300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = subset(all_elytra, scientificName_Species==species)%>%
+             filter(siteID %in% siteList) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill = siteID)) +
+      geom_density(alpha=.5) +
+      geom_rug(aes(colour = siteID)) +
+      geom_vline(data = subset(site_species_var, scientificName_Species==species &
+                                 n>=cutoff)%>%
+                   filter(siteID %in% siteList) %>%
+                   filter(domainID %in% domList),
+                 aes(xintercept = mean_cm,
+                     colour = siteID)) +
+      scale_fill_manual(values=c("#006699", "#990000")) +
+      scale_color_manual(values=c("#006699", "#990000")) +
+      ylab("Site Density") +
+      xlab(NULL) +
+      theme_pubr() +
+      theme(legend.position="none") +
+      facet_wrap(.~siteID),
+    ggplot(data = subset(all_elytra, scientificName_Species==species) %>%
+             filter(plotID %in% plotList) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill= plotID)) +
+      geom_density(alpha=0.2) +
+      geom_rug(aes(colour = plotID)) +
+      geom_vline(data = subset(plot_species_var, scientificName_Species==species &
+                                 n>=cutoff) %>%
+                   filter(plotID %in% plotList) %>%
+                   filter(domainID %in% domList),
+                 aes(xintercept = mean_cm,
+                     color = plotID)) +
+      scale_fill_manual(values=c("#00CCCC", "#009999", "#3399cc",
+                                 "#3366cc", "#0000ff", "#33ccff",
+                                 "#0099cc", "#0066ff", "#3399ff",
+                                 "#660000", "#990000", "#cc3333",
+                                 "#ff0000", "#cc3300", "#ff6666",
+                                 "#ff6600", "#cc0033", "#fc4e2a",
+                                 "#d23428")) +
+      scale_color_manual(values=c("#00CCCC", "#009999", "#3399cc",
+                                  "#3366cc", "#0000ff", "#33ccff",
+                                  "#0099cc", "#0066ff", "#3399ff",
+                                  "#660000", "#990000", "#cc3333",
+                                  "#ff0000", "#cc3300", "#ff6666",
+                                  "#ff6600", "#cc0033", "#fc4e2a",
+                                  "#d23428")) +
+      ylab("Plot Density") +
+      xlab("Elytra Length (cm)") +
+      theme_pubr()+
+      theme(legend.position="none")+
+      facet_wrap(.~siteID),
+    nrow = 2
+  )
+)
+dev.off()
+#################### Questions #########################################3
+#Are high CV plots just combined across multiple years?
+
+
+#png("./Figures/NestedVar.png", height = 10, width = 12, units = "in", res = 300)
+ggplot(subset(var_all_scales, scientificName_Species!="Carabidae sp." &  scientificName_Species!="Pterostichus coracinus"),
+       aes(scale, var_cm, group = scientificName_Species, col = siteID, shape = domainID)) +
+  theme_pubr() + 
+  # scale_shape_manual(values=c(16,15,17:25))+
+  scale_shape_manual(values=c(16,15,17:25,6:14))+
+  geom_point(size = 2) +
+  # scale_color_manual(values = c("#89C5DA", "#DA5724", "#74D944", "#CE50CA", "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", 
+  #                               "#673770", "#D3D93E", "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
+  #                               "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D", 
+  #                               "#8A7C64", "#599861")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  ylab("Variance (cm)") +
+  facet_wrap(.~scientificName_Species, scale="free_y") 
+dev.off()
+
+ggplot(var_all_scales,
        aes(var_cm)) +
   theme_pubr() + 
   scale_shape_manual(values=c(16,15,17:25))+
@@ -277,7 +826,7 @@ ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!
   xlab("Variance (cm)") +
   facet_wrap(.~scale, scale="free_y", ncol=1) 
 
-ggplot(subset(var_all_scales, scientificName!="Carabidae sp." &  scientificName!="Pterostichus coracinus"),
+ggplot(var_all_scales,
        aes(cv2_pct)) +
   theme_pubr() + 
   geom_histogram() +
@@ -289,9 +838,287 @@ var_all_scales %>%
   group_by(scale) %>%
   summarise(
     n = n(),
-    mean = mean(cv2_pct, na.rm = TRUE),
+    mean_cvpct = mean(cv2_pct, na.rm = TRUE),
     lower_ci = t.test(cv2_pct)$conf.int[1],
     upper_ci = t.test(cv2_pct)$conf.int[2]
   ) %>%
   ungroup()
 
+#### Geo speatial ####
+library(neonDivData)
+head(var_all_scales)
+neon_location_BET<-subset(neon_location, substr(location_id, (nchar(location_id)-2), nchar(location_id))=="bet")
+plot_species_var_pre<-plot_species_var
+plot_species_var<-merge(plot_species_var, neon_location_BET, by="plotID")
+plot_species_var
+site_species_var<-merge(site_species_var, neon_sites, by.x="ID", by.y="siteID")
+site_species_var
+domain_species_var
+
+ggplot(site_species_var, aes(x=Latitude, y=mean_cm)) +
+  geom_point() +
+  geom_smooth(method = "lm", se=FALSE) +
+  theme_pubr() +
+  theme(legend.position = "None")
+ggplot(site_species_var, aes(x=Latitude, y=mean_cm, colour = scientificName_Species)) +
+  geom_point() +
+  geom_smooth(method = "lm", se=FALSE) +
+  theme_pubr() +
+  theme(legend.position = "None")
+ggplot(site_species_var, aes(x=Latitude, y=var_cm, colour = n)) +
+  geom_point() +
+  theme_pubr()
+ggplot(site_species_var, aes(x=Latitude, y=cv2_pct, colour = n)) +
+  geom_point() +
+  theme_pubr() +
+  ylim(0,100)
+ggplot(site_species_var, aes(x=Latitude, y = n)) +
+  geom_point() +
+  theme_pubr()
+ggplot(site_species_var, aes(x=Latitude, y = range, colour = log10(n))) +
+  geom_point() +
+  theme_pubr()
+ggplot(site_species_var, aes(y = range, x = n)) +
+  geom_point() +
+  theme_pubr()
+
+ggplot(site_species_var, aes(x=n, y=log(cv2_pct))) +
+  geom_point() +
+  geom_smooth(method = "lm", se=FALSE) +
+  theme_pubr() +
+  theme(legend.position = "None")
+
+
+#Plot
+plot_cummunity_summary<-plot_species_var %>%
+  group_by(plotID) %>%
+  summarise(
+    n_spp = n(),
+    max_cm = max(mean_cm, na.rm = TRUE),
+    min_cm= min(mean_cm, na.rm = TRUE),
+    range= (max(mean_cm, na.rm = TRUE)-min(mean_cm, na.rm = TRUE)),
+    mean_cm = mean(mean_cm, na.rm = TRUE)
+  ) %>% 
+  ungroup()
+plot_cummunity_summary
+plot_cummunity_summary<-merge(plot_cummunity_summary, neon_location_BET, by="plotID")
+
+#Site
+site_cummunity_summary<-site_species_var %>%
+  group_by(ID) %>%
+  summarise(
+    n_spp = n(),
+    max_cm = max(mean_cm, na.rm = TRUE),
+    min_cm= min(mean_cm, na.rm = TRUE),
+    range= (max(mean_cm, na.rm = TRUE)-min(mean_cm, na.rm = TRUE)),
+    mean_cm = mean(mean_cm, na.rm = TRUE)
+  ) %>% 
+  ungroup()
+site_cummunity_summary
+site_cummunity_summary<-merge(site_cummunity_summary, neon_sites, by.x = "ID", by.y="siteID")
+
+ggplot(site_cummunity_summary, aes(x=Latitude, y=mean_cm, colour = n_spp)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+ggplot(site_cummunity_summary, aes(x=Latitude, y=min_cm, colour = n_spp)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+ggplot(site_cummunity_summary, aes(x=Latitude, y=max_cm, colour = n_spp)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+ggplot(site_cummunity_summary, aes(x=Latitude, y = range)) +
+  geom_point() +
+  theme_pubr()
+ggplot(site_cummunity_summary, aes(y = range, x = n_spp)) +
+  geom_point() +
+  theme_pubr()
+
+ggplot(plot_cummunity_summary, aes(x=latitude, y=mean_cm)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+ggplot(plot_cummunity_summary, aes(x=latitude, y=min_cm)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+ggplot(plot_cummunity_summary, aes(x=latitude, y=max_cm)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+
+ggplot(plot_cummunity_summary, aes(x=latitude, y = range)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr()
+ggplot(plot_cummunity_summary, aes(y = range, x = n_spp)) +
+  geom_point() +
+  theme_pubr()
+
+#Latitude Graphs####
+#Mean size
+#communit level means
+png("./Figures/BodySizeQuantification/CWM(site)_latitude.png", units = "in", width = 6, height = 5, res=300)
+ggplot(site_cummunity_summary, aes(x=Latitude, y=mean_cm)) +
+  geom_point(col="grey") +
+  geom_smooth(method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+             aes(x=Latitude, y=mean_cm)) +
+  geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+              aes(x=Latitude, y=mean_cm), 
+              method = "lm", col="black")+
+  theme_pubr() +
+  labs(title = "Community Weighted Mean Bodysize by Latitude",
+       subtitle = "Site Level",
+       x = "Latitude",
+       y = "Elytra Length (cm)")
+dev.off()
+
+png("./Figures/BodySizeQuantification/CWM(plot)_latitude.png", units = "in", width = 6, height = 5, res=300)
+ggplot(plot_cummunity_summary, aes(x=latitude, y=mean_cm)) +
+  geom_point(col="grey") +
+  geom_smooth(method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+             aes(x=latitude, y=mean_cm)) +
+  geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+              aes(x=latitude, y=mean_cm), 
+              method = "lm", col="black")+
+  theme_pubr()+
+  labs(title = "Community Weighted Mean Bodysize by Latitude",
+       subtitle = "Plot Level",
+       x = "Latitude",
+       y = "Elytra Length (cm)")
+dev.off()
+
+png("./Figures/BodySizeQuantification/CWStack(plot)_latitude.png", units = "in", width = 6, height = 5, res=300)
+ggplot(plot_cummunity_summary, aes(x=latitude, y=min_cm)) +
+  geom_point(col="lightblue") +
+  geom_smooth(method = "lm", col="lightblue", alpha=0.15)+
+  geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+             aes(x=latitude, y=min_cm), col="navy") +
+  geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+              aes(x=latitude, y=min_cm), 
+              method = "lm", col="navy")+
+  geom_point(data = plot_cummunity_summary, aes(x=latitude, y=max_cm), col="#FF9966") +
+  geom_smooth(data = plot_cummunity_summary, aes(x=latitude, y=max_cm),
+              method = "lm", col="#FF9966", alpha=0.15)+
+  geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+             aes(x=latitude, y=max_cm), col="#660000") +
+  geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+              aes(x=latitude, y=max_cm), 
+              method = "lm", col="#660000")+
+  geom_point(col="grey", aes(x=latitude, y=mean_cm)) +
+  geom_smooth(aes(x=latitude, y=mean_cm) , method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+             aes(x=latitude, y=mean_cm)) +
+  geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+              aes(x=latitude, y=mean_cm), 
+              method = "lm", col="black") +
+  theme_pubr()+
+  labs(title = "Community Weighted Bodysize by Latitude",
+       subtitle = "Plot Level",
+       x = "Latitude",
+       y = "Elytra Length (cm)",
+       caption = "Max (red), Mean (black), Min (blue)")
+dev.off()
+
+
+
+#No aggrigation
+ggplot(all_elytra_lat, aes(x=latitude, y=cm_elytra_max_length)) +
+  geom_point(col="grey") +
+  geom_smooth(method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(all_elytra_lat, latitude>=25), 
+             aes(x=latitude, y=cm_elytra_max_length)) +
+  geom_smooth(data=subset(all_elytra_lat, latitude>=25), 
+              aes(x=latitude, y=cm_elytra_max_length), 
+              method = "lm", col="black")+
+  theme_pubr()
+
+ggplot(all_elytra_lat, aes(x=latitude, y=cm_elytra_max_length)) +
+  geom_point(alpha=0.2) +
+  geom_smooth(method = "lm")+
+  theme_pubr() +
+  theme(legend.position = "None")
+
+
+sort(table(plot_species_var$scientificName_Species), decreasing = T)[1:50]
+all_elytra_lat<-merge(all_elytra, neon_location_BET, by="plotID")
+head(all_elytra_lat)
+
+all_elytra_lat_subset <- all_elytra_lat %>%
+  group_by(scientificName_Species) %>%
+  filter(n_distinct(siteID.y) > 3) %>%
+  ungroup()
+
+png("./Figures/BodySizeQuantification/SpeciesBodysize_latitude.png", units = "in", width = 6, height = 5, res=300)
+ggplot(all_elytra_lat_subset, aes(x=latitude, y=cm_elytra_max_length, colour = scientificName_Species)) +
+  geom_point(alpha=0.2) +
+  geom_smooth(method = "lm")+
+  theme_pubr() +
+  theme(legend.position = "None")+
+  labs(title = "Species Bodysize by Latitude",
+       x = "Latitude",
+       y = "Elytra Length (cm)",
+       caption = "subset to species that appear in more than 3 sites")
+dev.off()
+
+#Variance in size
+png("./Figures/BodySizeQuantification/SpeciesCVpct(plot)_latitude.png", units = "in", width = 6, height = 5, res=300)
+ggplot(subset(plot_species_var, n>20), aes(x=latitude, y=cv2_pct)) +
+  geom_point(alpha=0.2) +
+  geom_smooth(method = "lm")+
+  theme_pubr() +
+  theme(legend.position = "None")+
+  labs(title = "Species CV% by Latitude",
+       subtitle = "Plot Level",
+       x = "Latitude",
+       y = "Variance as % of mean² (CV² × 100)",
+       caption = "Subset to obersvations of species with >20 individuals per plot")
+dev.off()
+
+ggplot(subset(plot_species_var, n>20), aes(x=latitude, y=cv2_pct, colour = scientificName_Species)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  theme_pubr() +
+  theme(legend.position = "None")
+
+png("./Figures/BodySizeQuantification/CVpct(plot)_N.png", units = "in", width = 6, height = 5, res=300)
+ggplot(plot_species_var, aes(x=log10(n), y=log10(cv2_pct))) +
+  geom_point(alpha=0.2) +
+  theme_pubr() +
+  theme(legend.position = "None")
+dev.off()
+
+#Range of Body Size
+ggplot(site_cummunity_summary, aes(x=Latitude, y=range)) +
+  geom_point(col="grey") +
+  geom_smooth(method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+             aes(x=Latitude, y=range)) +
+  geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+              aes(x=Latitude, y=range), 
+              method = "lm", col="black")+
+  theme_pubr()
+
+ggplot(plot_cummunity_summary, aes(x=latitude, y=range)) +
+  geom_point(col="grey") +
+  geom_smooth(method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+             aes(x=latitude, y=range)) +
+  geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+              aes(x=latitude, y=range), 
+              method = "lm", col="black")+
+  theme_pubr()
+
+ggplot(plot_cummunity_summary, aes(x=mean_cm, y=range)) +
+  geom_point(col="grey") +
+  geom_smooth(method = "lm", col="grey", alpha=0.15)+
+  # geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+  #            aes(x=Latitude, y=mean_cm)) +
+  # geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+              # aes(x=Latitude, y=mean_cm), 
+              # method = "lm", col="black")+
+  theme_pubr()
