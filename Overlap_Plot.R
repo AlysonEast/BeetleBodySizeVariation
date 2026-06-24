@@ -6,31 +6,8 @@ library(maps)
 library(dplyr)
 library(ggrepel)
 
-# getwd()
-# setwd("/home/aly/Beetles/BeetleBodySizeVariation")
-# df<-read.csv("./BeetleMeasurements.csv")
-# meta<-read.csv("./NEON_Field_Site_Metadata_20260130.csv")
-# puum<-read.csv("./trait_annotations.csv")
-# 
-# df<-merge(df, meta, by.x="siteID", by.y="site_id", all.x=TRUE)
-# 
-# head(df)
-# 
-# df_sub<-subset(df, user_name=="IsaFluck")
-# 
-# head(df_sub)
-# str(df_sub)
-# 
-# ElytraLength<-subset(df_sub, structure=="ElytraLength")
-# 
-# hist(ElytraLength$dist_cm)
-# 
-# site_spp<-table(ElytraLength$species, ElytraLength$siteID)
-# site_spp<-as.data.frame(site_spp)
-# 
-# ElytraLength<-subset(ElytraLength, siteID!="DELA" & siteID!="DSNY")
-
 #### READ IN DATA####
+setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
 df<-read.csv("./Data/beetle_lengths_cm_reviewed_clean.csv")
 allInd<-read.csv("./Data/allIndividuals.csv")
@@ -260,15 +237,6 @@ table(subset(all_elytra, siteID=="STER")$plotID)
 sort(table(subset(all_elytra, siteID=="STER")$scientificName_Species))
 table(subset(all_elytra, siteID=="STER")$scientificName_Species, subset(all_elytra, siteID=="STER")$plotID)
 
-all_elytra_plot50 <- all_elytra %>%
-  group_by(plotID, scientificName_Species) %>%
-  filter(n() >= 20) %>%
-  ungroup()
-all_elytra_site50 <- all_elytra %>%
-  group_by(siteID, scientificName_Species) %>%
-  filter(n() >= 20) %>%
-  ungroup()
-
 ggarrange(nrow=4,
           ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
             geom_density(alpha=0.5) +
@@ -291,6 +259,32 @@ ggarrange(nrow=4,
 #### OStats for the site level
 #### Overlap Stats ####
 library(Ostats)
+library(neonDivData)
+#### All Obs, unedited####
+elytraDF<-all_elytra[,c("domainID","siteID","plotID","scientificName_Species","log_dist_cm")]
+
+Ostats_unedited <- Ostats(traits = as.matrix(elytraDF[,'log_dist_cm', drop = FALSE]),
+                        sp = factor(elytraDF$scientificName_Species),
+                        plots = factor(elytraDF$plotID),
+                        random_seed = 517)
+
+as.data.frame(Ostats_unedited$overlaps_norm)
+Ostats_unedited$overlaps_norm_ses
+
+neon_location_BET<-subset(neon_location, substr(location_id, (nchar(location_id)-2), nchar(location_id))=="bet")
+Ostats_unedited_map<-merge(neon_location_BET, Ostats_unedited$overlaps_norm, by.x="plotID", by.y = "row.names")
+Ostats_unedited_map <- Ostats_unedited_map %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+#### 20 plus obs ####
+all_elytra_plot50 <- all_elytra %>%
+  group_by(plotID, scientificName_Species) %>%
+  filter(n() >= 20) %>%
+  ungroup()
+all_elytra_site50 <- all_elytra %>%
+  group_by(siteID, scientificName_Species) %>%
+  filter(n() >= 20) %>%
+  ungroup()
 
 plot20plus_elytraDF<-all_elytra_plot50[,c("domainID","siteID","plotID","scientificName_Species","log_dist_cm")]
 
@@ -325,36 +319,10 @@ for (i in 1:length(sites)) {
 }
 
 
-#### Map of overlaps ####
-library(neonDivData)
-neon_location_BET<-subset(neon_location, substr(location_id, (nchar(location_id)-2), nchar(location_id))=="bet")
 
 Ostats_map<-merge(neon_location_BET, Ostats_20plus$overlaps_norm, by.x="plotID", by.y = "row.names")
 Ostats_map <- Ostats_map %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
-
-# Convert state map to dataframe
-states_map <- map_data("state")
-
-ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group),   # Base map
-                        fill = "gray95",
-                        color = "gray70",
-                        linewidth = 0.2) +
-  geom_sf(data = Ostats_map, aes(color = log_dist_cm),   # Site points
-          size = 6, alpha = 0.9, inherit.aes = FALSE) +
-  geom_text_repel(data = Ostats_map, aes(label = plotID, geometry = geometry), # Site labels
-                  stat = "sf_coordinates", size = 3,
-                  min.segment.length = 0, segment.color = NA,
-                  seed = 42, inherit.aes = FALSE) +
-  scale_color_viridis_c(name = "Overlap", option = "magma") +
-  coord_sf() +
-  theme_minimal(base_size = 12) +
-  theme(panel.grid = element_blank(),
-        legend.position = "right") +
-  labs(title = "Site Locations",
-       subtitle = "Points colored by overlap",
-       x = NULL,
-       y = NULL)
 
 #### Average distribution shape ####
 # -------------------------------------------------------------------------
@@ -387,9 +355,7 @@ typical_cvpct <- 0.47
 # Convert percentage to proportion
 cv2 <- typical_cvpct / 100
 
-# -------------------------------------------------------------------------
 # Identify low-sample species-site combinations
-# -------------------------------------------------------------------------
 
 low_n <- all_elytra %>%
   group_by(scientificName_Species, plotID) %>%
@@ -461,7 +427,55 @@ Ostats_aug <- Ostats(traits = as.matrix(all_elytra_aug[,'log_dist_cm', drop = FA
 
 hist(Ostats_20plus$overlaps_norm)
 hist(Ostats_aug$overlaps_norm)
+Ostats_aug_map<-merge(meta, Ostats_aug$overlaps_norm, by.x="site_id", by.y = "row.names")
+Ostats_aug_map <- Ostats_aug_map %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
+#### Average distribution shape 3-19 augment ####
+low_n <- all_elytra %>%
+  group_by(scientificName_Species, plotD) %>%
+  summarise(
+    n_obs = n(),
+    mean_dist = mean(cm_elytra_max_length, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(n_obs < 20 & 
+           n_obs>=3)
+
+set.seed(42)
+
+sim_low_n <- low_n %>%
+  rowwise() %>%
+  mutate(n_to_add = 20 - n_obs, # Number of observations needed to reach n = 20
+         sdlog = sqrt(log(1 + cv2)), # Lognormal parameters implied by the typical CV² relationship
+         meanlog = log(mean_dist) - (sdlog^2 / 2),
+         # Simulate additional observations
+         sim_vals = list(rlnorm(n = n_to_add,
+                                meanlog = meanlog,
+                                sdlog = sdlog))) %>%
+  unnest(cols = sim_vals) %>%
+  rename(cm_elytra_max_length = sim_vals) %>%
+  select(scientificName_Species,
+         plotID,
+         cm_elytra_max_length) %>%
+  ungroup()
+
+sim_low_n$siteID<-NA
+sim_low_n$domainID<-NA
+
+all_elytra_aug3to19 <- rbind(all_elytraDF, sim_low_n[,colnames(all_elytraDF)])
+all_elytra_aug3to19$log_dist_cm<-log10(all_elytra_aug3to19$cm_elytra_max_length)
+
+Ostats_aug3to19 <- Ostats(traits = as.matrix(all_elytra_aug3to19[,'log_dist_cm', drop = FALSE]),
+                     sp = factor(all_elytra_aug3to19$scientificName_Species),
+                     plots = factor(all_elytra_aug3to19$plotID),
+                     random_seed = 517)
+
+Ostats_aug3to19_map<-merge(meta, Ostats_aug3to19$overlaps_norm, by.x="site_id", by.y = "row.names")
+Ostats_aug3to19_map <- Ostats_aug3to19_map %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+#### Plots ####
 
 plots<-sort(unique(all_elytra_aug$plotID))
 plots
@@ -471,7 +485,7 @@ sites<-unique(subplots$siteID)
 table(subplots$siteID)
 
 
-for (i in 1:length(sites)) {
+for (i in 1:length(sites
   png(paste0("./Figures/Overlap/Plots/PlotOverlap",sites[i],"Augmented.png"), units = "in", width = 9, height = 5, res=300)
   print(Ostats_plot(plots = all_elytra_aug$plotID,
                     sp = all_elytra_aug$scientificName_Species,
@@ -485,21 +499,16 @@ for (i in 1:length(sites)) {
   dev.off()
   }
 
-
-
-neon_location_BET<-subset(neon_location, substr(location_id, (nchar(location_id)-2), nchar(location_id))=="bet")
-
-Ostats_aug_map<-merge(neon_location_BET, Ostats_aug$overlaps_norm, by.x="plotID", by.y = "row.names")
-Ostats_aug_map <- Ostats_aug_map %>%
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+# Convert state map to dataframe
+states_map <- map_data("state")
 
 ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group),   # Base map
                         fill = "gray95",
                         color = "gray70",
                         linewidth = 0.2) +
-  geom_sf(data = subset(Ostats_aug_map), aes(color = log_dist_cm),   # Site points
+  geom_sf(data = Ostats_map, aes(color = log_dist_cm),   # Site points
           size = 6, alpha = 0.9, inherit.aes = FALSE) +
-  geom_text_repel(data = subset(Ostats_aug_map), aes(label = plotID, geometry = geometry), # Site labels
+  geom_text_repel(data = Ostats_map, aes(label = plotID, geometry = geometry), # Site labels
                   stat = "sf_coordinates", size = 3,
                   min.segment.length = 0, segment.color = NA,
                   seed = 42, inherit.aes = FALSE) +
@@ -512,9 +521,11 @@ ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group)
        subtitle = "Points colored by overlap",
        x = NULL,
        y = NULL)
+
  
 #### Write out data 
+write.csv(Ostats_unedited_map, "./Outputs/Plot_Ostats_unedited.csv", row.names = FALSE)
 write.csv(Ostats_aug_map, "./Outputs/Plot_Ostats_augmented.csv", row.names = FALSE)
+write.csv(Ostats_aug3to19_map, "./Outputs/Plot_Ostats_augmented3to19.csv", row.names = FALSE)
 write.csv(Ostats_map, "./Outputs/Plot_Ostats_20plus.csv", row.names = FALSE)
-
 
