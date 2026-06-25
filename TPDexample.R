@@ -8,9 +8,9 @@ library(ggrepel)
 
 getwd()
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
-df<-read.csv("./BeetleMeasurements.csv")
-meta<-read.csv("./NEON_Field_Site_Metadata_20260130.csv")
-puum<-read.csv("./trait_annotations.csv")
+df<-read.csv("./Data/BeetleMeasurements.csv")
+meta<-read.csv("./Data/NEON_Field_Site_Metadata_20260130.csv")
+puum<-read.csv("./Data/trait_annotations.csv")
 
 df<-merge(df, meta, by.x="siteID", by.y="site_id", all.x=TRUE)
 
