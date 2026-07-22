@@ -228,7 +228,7 @@ AOP_list[AOP_list == "TREE"] <- "STEI" #And TREE downloads as STEI (with warning
 sites_list
 AOP_list
 
-for (i in 45:length(sites_list)) {#
+for (i in 1:length(sites_list)) {#
   # Get LiDAR files for site
   site_files <- grep(
     AOP_list[i],

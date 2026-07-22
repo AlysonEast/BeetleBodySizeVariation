@@ -6,7 +6,7 @@ Quantifying intraspecific and community body size variation in carabid beetles a
 
 ## Overview
 
-I combine elytra length measurements from four sources into a single harmonized table of individual beetles (`all_elytra`), then ask three questions of it:
+I combine elytra length measurements from four sources into a single harmonized dataset (`BodysizeCombinedClean.csv`), then ask three questions of it:
 
 1. **What shape are body size distributions?** I characterize skewness, kurtosis, and modality (Hartigan's dip test) of species-level size distributions.
 2. **How does body size variance partition across spatial scales?** I compute CV² as a percentage of the mean (`100 * var / mean²`) for each species at the species, domain, site, and plot level, and compare nested scales.
@@ -20,13 +20,14 @@ The scripts below are the current analysis. They are not sourced by a master scr
 
 | Order | Script | What it does | Key outputs |
 |---|---|---|---|
-| 1 | `BodySizeQuantification.R` | Harmonizes all four data sources into `all_elytra`. Computes distribution shape (skew, kurtosis, dip test) and CV² across nested spatial scales. Produces latitude and Bergmann's rule figures. | `./Figures/BodySizeQuantification/*.png` |
-| 2 | `Overlap_Site.R` | Site-level O-statistics under four sampling treatments (see [Sampling treatments](#sampling-treatments)). | `./Outputs/Site_Ostats_{unedited,20plus,augmented,augmented3to19}.csv`, `./Figures/Overlap/*.png` |
-| 3 | `Overlap_Plot.R` | Plot-level O-statistics under the same four treatments, plus per-site overlap panels, overlap maps, and effect size maps. | `./Outputs/Plot_Ostats_*.csv`, `./Figures/Overlap/Plots/`, `./Figures/Overlap/Plots/Maps/` |
-| 4 | `Environmental.R` | Assembles plot-level environmental covariates: WorldClim bioclim variables plus a PCA, MODIS NPP, and LiDAR-derived canopy structure and rugosity. | `./Outputs/BeetlePlotswEnvData.csv`, `./Outputs/BETplot_Rugosity` |
-| 5 | `OverlapRichness.R` | Joins O-statistics to estimated species richness and site environment. This is the newest and least developed script. | Exploratory only |
+| 1 | `CombineAndCleanDatasets.R` | Merges all four measurement sources, applies QC flags (z-score, robust z-score, image consistency, species extremes), integrates manual review, and writes the harmonized dataset. | `./Data/BodysizeCombinedClean.csv` |
+| 2 | `BodySizeQuantification.R` | Reads `BodysizeCombinedClean.csv`. Computes distribution shape (skew, kurtosis, dip test) and CV² across nested spatial scales. Produces latitude and Bergmann's rule figures. | `./Figures/BodySizeQuantification/*.png` |
+| 3 | `Overlap_Site.R` | Site-level O-statistics under four sampling treatments (see [Sampling treatments](#sampling-treatments)). | `./Outputs/Site_Ostats_{unedited,20plus,augmented,augmented3to19}.csv`, `./Figures/Overlap/*.png` |
+| 4 | `Overlap_Plot.R` | Plot-level O-statistics under the same four treatments, plus per-site overlap panels, overlap maps, and effect size maps. | `./Outputs/Plot_Ostats_*.csv`, `./Figures/Overlap/Plots/`, `./Figures/Overlap/Plots/Maps/` |
+| 5 | `Environmental.R` | Assembles plot-level environmental covariates: WorldClim bioclim variables plus a PCA, MODIS NPP, and LiDAR-derived canopy structure and rugosity. | `./Outputs/BeetlePlotswEnvData.csv`, `./Outputs/BETplot_Rugosity` |
+| 6 | `OverlapRichness.R` | Joins O-statistics to estimated species richness and site environment. This is the newest and least developed script. | Exploratory only |
 
-`Overlap_Site.R` and `Overlap_Plot.R` each repeat the data harmonization block from `BodySizeQuantification.R` rather than sourcing it, so they can be run standalone.
+All analysis scripts (steps 2–6) read `Data/BodysizeCombinedClean.csv` directly and can be run independently after step 1.
 
 ### Sampling treatments
 
@@ -60,7 +61,7 @@ These are kept for provenance and for figure generation. They are not part of th
 | BeetlePalooza annotations | `Data/BeetleMeasurements.csv` | Subset to `user_name == "IsaFluck"` and `structure == "ElytraLength"` for annotator consistency. |
 | Hawaii (PUUM) annotations | `Data/trait_annotations.csv` | Includes scalebar columns (`px_scalebar`, `cm_scalebar`). |
 | NEON carabid pitfall data | `DP1.10022.001` via `neonUtilities` | Parataxonomist and expert taxonomist tables combined, expert IDs taking precedence. Released and provisional records both pulled, then cached to `Data/NEON_ExpertParaCombined.csv` and `Data/NEON_ExpertParaCombined_Prelim.csv`. |
-| NEON site metadata | `NEON_Field_Site_Metadata_20260130.csv` | Committed to this repository. Downloaded 2026-01-30. |
+| NEON site metadata | `Data/NEON_Field_Site_Metadata_20260130.csv` | Committed to this repository. Downloaded 2026-01-30. |
 | WorldClim bioclim | `worldclim_global`, 0.5 arc-min, USA | 19 bioclim variables, extracted at BET plot centroids, log-transformed for precipitation, then PCA (`princomp`, correlation matrix). |
 | MODIS NPP | `NEON_MODIS_NPP_2018_2019.csv` | Derived in Google Earth Engine. Script link is in `Environmental.R`. |
 | NEON LiDAR | `DP1.30003.001` (discrete return), `DP3.30024.001` (DTM) | 2018 preferred, falling back to 2019 then 2017. Clipped to 40 m buffers around plot centroids; 0.5 m voxel density used to derive rugosity, mean height, 98th percentile height, and height SD. |
@@ -117,7 +118,6 @@ BeetleBodySizeVariation/
 
 - Absolute paths are hard-coded throughout rather than being relative or configured once.
 - `Environmental.R` writes `./Outputs/BETplot_Rugosity` without a `.csv` extension.
-- The LiDAR metrics loop in `Environmental.R` starts at `i = 45` as a resume point from an interrupted run. Reset to `1` for a full run.
 - LiDAR downloads are gated behind `p <- NA` so they do not fire accidentally. Set `p` to `1` or `2` to enable.
 - Several NEON sites download AOP data under a neighboring site code (DCFS/WOOD, KONA/KONZ, TREE/STEI, STEI/CHEQ). `Environmental.R` remaps these explicitly.
 - The Biorepo source has no pixel or scalebar columns, so `px_scalebar`, `cm_scalebar`, and `px_elytra_max_length` are set to `NA` during harmonization and flagged in the code for a future update.
