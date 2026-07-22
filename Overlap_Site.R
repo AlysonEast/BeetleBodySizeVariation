@@ -224,6 +224,40 @@ all_elytra <- all_elytra %>%
 
 all_elytra<-subset(all_elytra, yearCollected == 2018 | yearCollected == 2019)
 
+
+#Remove afer manual review
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D09.000975") # Wrong Spp, prob individudula ID error
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.013169") # Bad Measure
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D10.016322") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D08.002280") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D10.015494") # Wrong Spp, prob individudula ID error
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D09.002980") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D01.005349") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D13.001261") # Wrong Spp, prob individudula ID error
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D13.001271") # Wrong Spp, prob individudula ID error
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.003475") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D09.002671") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D09.002187") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D05.003147") # Wrong Spp, prob individudula ID error
+
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D18.000854") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D18.001484") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D18.002816") # Check in Nathan outputs
+
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.012343") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.012065") # Check in Nathan outputs
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D08.003658") # Check in Nathan outputs
+
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.012011") # #Damaged Specimen
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.007024") # #Damaged Specimen
+
+all_elytra$cm_elytra_max_length<-ifelse(all_elytra$imageID=="group_images/IMG_0510.png", all_elytra$cm_elytra_max_length*2, all_elytra$cm_elytra_max_length)   # Scale Bar Doubled
+
+
+all_elytra<-subset(all_elytra, imageID!="MLBS_009.S.20180522.jpg") # Beetlepalooza data, one image, all outliers
+all_elytra<-subset(all_elytra, imageID!="MLBS_009.E.20180522.CARABIDS.01.jpg") # Beetlepalooza data, one image, all outliers
+all_elytra<-subset(all_elytra, imageID!="Cicindela_punctulata-Btray-Y2022-NEON.BET.D13.001489-NEON.BET.D13.001511.png") # all indivID yield Calathus advena
+
 #### Explore the data ####
 # Get unique siteID levels ordered by latitude
 site_order <- unique(all_elytra[order(all_elytra$latitude, decreasing = TRUE), "siteID"])
@@ -252,24 +286,24 @@ table(subset(all_elytra, siteID=="STER")$plotID)
 sort(table(subset(all_elytra, siteID=="STER")$scientificName_Species))
 table(subset(all_elytra, siteID=="STER")$scientificName_Species, subset(all_elytra, siteID=="STER")$plotID)
 
-ggarrange(nrow=4,
-          ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-            geom_density(alpha=0.5) +
-            #  theme(legend.position="none") +
-            facet_wrap(.~siteID, scales = "free_y"),
-          ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-            geom_density(alpha=0.5) +
-            #  theme(legend.position="0") +
-            facet_wrap(.~plotID, scales = "free_y"),
-          ggplot(data = subset(all_elytra_site50, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-            geom_density(alpha=0.5) +
-            #  theme(legend.position="none") +
-            facet_wrap(.~siteID, scales = "free_y"),
-          ggplot(data = subset(all_elytra_plot50, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-            geom_density(alpha=0.5) +
-            #  theme(legend.position="0") +
-            facet_wrap(.~plotID, scales = "free_y")
-)
+# ggarrange(nrow=4,
+#           ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
+#             geom_density(alpha=0.5) +
+#             #  theme(legend.position="none") +
+#             facet_wrap(.~siteID, scales = "free_y"),
+#           ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
+#             geom_density(alpha=0.5) +
+#             #  theme(legend.position="0") +
+#             facet_wrap(.~plotID, scales = "free_y"),
+#           ggplot(data = subset(all_elytra_site50, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
+#             geom_density(alpha=0.5) +
+#             #  theme(legend.position="none") +
+#             facet_wrap(.~siteID, scales = "free_y"),
+#           ggplot(data = subset(all_elytra_plot50, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
+#             geom_density(alpha=0.5) +
+#             #  theme(legend.position="0") +
+#             facet_wrap(.~plotID, scales = "free_y")
+# )
 
 #### OStats for the site level
 #### Overlap Stats ####
@@ -286,7 +320,15 @@ as.data.frame(Ostats_unedited$overlaps_norm)
 Ostats_unedited$overlaps_norm_ses
 
 meta
-Ostats_unedited_map<-merge(meta, Ostats_unedited$overlaps_norm, by.x="site_id", by.y = "row.names")
+Ostats_unedited_df<-as.data.frame(Ostats_unedited)
+str(Ostats_unedited)
+colnames(Ostats_unedited_df)<-c("overlaps_norm","overlaps_unnorm",
+                                "overlaps_norm_ses","overlaps_norm_ses_lower","overlaps_norm_ses_upper",
+                                "overlaps_norm_raw_lower","overlaps_norm_raw_upper",
+                                "overlaps_unnorm_ses","overlaps_unnorm_ses_lower","overlaps_unnorm_ses_upper",
+                                "overlaps_unnorm_raw_lower","overlaps_unnorm_raw_upper")
+colnames(Ostats_unedited_df)
+Ostats_unedited_map<-merge(meta, Ostats_unedited_df, by.x="site_id", by.y = "row.names")
 Ostats_unedited_map <- Ostats_unedited_map %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
@@ -312,10 +354,18 @@ Ostats_20plus$overlaps_norm_ses
 
 sites<-levels(site20plus_elytraDF$siteID)
 
-Ostats_map<-merge(meta, Ostats_20plus$overlaps_norm, by.x="site_id", by.y = "row.names")
-Ostats_map <- Ostats_map %>%
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
+head(as.data.frame(Ostats_20plus))
+Ostats_20plus_df<-as.data.frame(Ostats_20plus)
+colnames(Ostats_20plus_df)<-c("overlaps_norm","overlaps_unnorm",
+                                "overlaps_norm_ses","overlaps_norm_ses_lower","overlaps_norm_ses_upper",
+                                "overlaps_norm_raw_lower","overlaps_norm_raw_upper",
+                                "overlaps_unnorm_ses","overlaps_unnorm_ses_lower","overlaps_unnorm_ses_upper",
+                                "overlaps_unnorm_raw_lower","overlaps_unnorm_raw_upper")
+colnames(Ostats_20plus_df)
+Ostats_20plus_map<-merge(meta, Ostats_20plus_df, by.x="site_id", by.y = "row.names")
+Ostats_20plus_map <- Ostats_20plus_map %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 #### Average distribution shape 1-19 augment ####
 # -------------------------------------------------------------------------
 # SIMULATE ADDITIONAL OBSERVATIONS FOR LOW-SAMPLE SPECIES-SITE COMBINATIONS
@@ -342,7 +392,7 @@ Ostats_map <- Ostats_map %>%
 #      observed mean-variance scaling.
 # -------------------------------------------------------------------------
 # Average CV² (%) estimated from well-sampled species-site combinations
-typical_cvpct <- 0.47
+typical_cvpct <- 0.506
 
 # Convert percentage to proportion
 cv2 <- typical_cvpct / 100
@@ -417,7 +467,18 @@ Ostats_aug <- Ostats(traits = as.matrix(all_elytra_aug[,'log_dist_cm', drop = FA
                          plots = factor(all_elytra_aug$siteID),
                          random_seed = 517)
 
-Ostats_aug_map<-merge(meta, Ostats_aug$overlaps_norm, by.x="site_id", by.y = "row.names")
+hist(Ostats_20plus$overlaps_norm)
+hist(Ostats_aug$overlaps_norm)
+
+head(as.data.frame(Ostats_aug))
+Ostats_aug_df<-as.data.frame(Ostats_aug)
+colnames(Ostats_aug_df)<-c("overlaps_norm","overlaps_unnorm",
+                              "overlaps_norm_ses","overlaps_norm_ses_lower","overlaps_norm_ses_upper",
+                              "overlaps_norm_raw_lower","overlaps_norm_raw_upper",
+                              "overlaps_unnorm_ses","overlaps_unnorm_ses_lower","overlaps_unnorm_ses_upper",
+                              "overlaps_unnorm_raw_lower","overlaps_unnorm_raw_upper")
+colnames(Ostats_aug_df)
+Ostats_aug_map<-merge(meta, Ostats_aug_df, by.x="site_id", by.y = "row.names")
 Ostats_aug_map <- Ostats_aug_map %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
@@ -461,11 +522,141 @@ Ostats_aug3to19 <- Ostats(traits = as.matrix(all_elytra_aug3to19[,'log_dist_cm',
                      plots = factor(all_elytra_aug3to19$siteID),
                      random_seed = 517)
 
-Ostats_aug3to19_map<-merge(meta, Ostats_aug3to19$overlaps_norm, by.x="site_id", by.y = "row.names")
+
+head(as.data.frame(Ostats_aug3to19))
+Ostats_aug3to19_df<-as.data.frame(Ostats_aug3to19)
+colnames(Ostats_aug3to19_df)<-c("overlaps_norm","overlaps_unnorm",
+                              "overlaps_norm_ses","overlaps_norm_ses_lower","overlaps_norm_ses_upper",
+                              "overlaps_norm_raw_lower","overlaps_norm_raw_upper",
+                              "overlaps_unnorm_ses","overlaps_unnorm_ses_lower","overlaps_unnorm_ses_upper",
+                              "overlaps_unnorm_raw_lower","overlaps_unnorm_raw_upper")
+colnames(Ostats_aug3to19_df)
+Ostats_aug3to19_map<-merge(meta, Ostats_aug3to19_df, by.x="site_id", by.y = "row.names")
 Ostats_aug3to19_map <- Ostats_aug3to19_map %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
+####Effect size Null model difference
+Ostats_unedited_map$norm_ses_direction<-ifelse(Ostats_unedited_map$overlaps_norm_ses<Ostats_unedited_map$overlaps_norm_ses_lower, 
+                                          paste0("lower"), ifelse(
+                                            Ostats_unedited_map$overlaps_norm_ses>Ostats_unedited_map$overlaps_norm_ses_upper, 
+                                            paste0("higher"), paste0("neutral")))
+table(Ostats_unedited_map$norm_ses_direction, exclude = NULL)
+Ostats_unedited_map$norm_ses_diff<-(Ostats_unedited_map$overlaps_norm_ses-Ostats_unedited_map$overlaps_norm_ses_lower)
+hist(Ostats_unedited_map$norm_ses_diff)
+
+Ostats_unedited_map$unnorm_ses_direction<-ifelse(Ostats_unedited_map$overlaps_unnorm_ses<Ostats_unedited_map$overlaps_unnorm_ses_lower, 
+                                               paste0("lower"), ifelse(
+                                                 Ostats_unedited_map$overlaps_unnorm_ses>Ostats_unedited_map$overlaps_unnorm_ses_upper, 
+                                                 paste0("higher"), paste0("neutral")))
+table(Ostats_unedited_map$unnorm_ses_direction, exclude = NULL)
+Ostats_unedited_map$unnorm_ses_diff<-(Ostats_unedited_map$overlaps_unnorm_ses-Ostats_unedited_map$overlaps_unnorm_ses_lower)
+hist(Ostats_unedited_map$unnorm_ses_diff)
+
+
+
+Ostats_aug_map$norm_ses_direction<-ifelse(Ostats_aug_map$overlaps_norm_ses<Ostats_aug_map$overlaps_norm_ses_lower, 
+                                     paste0("lower"), ifelse(
+                                       Ostats_aug_map$overlaps_norm_ses>Ostats_aug_map$overlaps_norm_ses_upper, 
+                                       paste0("higher"), paste0("neutral")))
+table(Ostats_aug_map$norm_ses_direction, exclude = NULL)
+Ostats_aug_map$norm_ses_diff<-(Ostats_aug_map$overlaps_norm_ses-Ostats_aug_map$overlaps_norm_ses_lower)
+hist(Ostats_aug_map$norm_ses_diff)
+
+Ostats_aug_map$unnorm_ses_direction<-ifelse(Ostats_aug_map$overlaps_unnorm_ses<Ostats_aug_map$overlaps_unnorm_ses_lower, 
+                                                 paste0("lower"), ifelse(
+                                                   Ostats_aug_map$overlaps_unnorm_ses>Ostats_aug_map$overlaps_unnorm_ses_upper, 
+                                                   paste0("higher"), paste0("neutral")))
+table(Ostats_aug_map$unnorm_ses_direction, exclude = NULL)
+Ostats_aug_map$unnorm_ses_diff<-(Ostats_aug_map$overlaps_unnorm_ses-Ostats_aug_map$overlaps_unnorm_ses_lower)
+hist(Ostats_aug_map$unnorm_ses_diff)
+
+Ostats_aug3to19_map$norm_ses_direction<-ifelse(Ostats_aug3to19_map$overlaps_norm_ses<Ostats_aug3to19_map$overlaps_norm_ses_lower, 
+                                          paste0("lower"), ifelse(
+                                            Ostats_aug3to19_map$overlaps_norm_ses>Ostats_aug3to19_map$overlaps_norm_ses_upper, 
+                                            paste0("higher"), paste0("neutral")))
+table(Ostats_aug3to19_map$norm_ses_direction, exclude = NULL)
+Ostats_aug3to19_map$norm_ses_diff<-(Ostats_aug3to19_map$overlaps_norm_ses-Ostats_aug3to19_map$overlaps_norm_ses_lower)
+hist(Ostats_aug3to19_map$norm_ses_diff)
+
+Ostats_aug3to19_map$unnorm_ses_direction<-ifelse(Ostats_aug3to19_map$overlaps_unnorm_ses<Ostats_aug3to19_map$overlaps_unnorm_ses_lower, 
+                                            paste0("lower"), ifelse(
+                                              Ostats_aug3to19_map$overlaps_unnorm_ses>Ostats_aug3to19_map$overlaps_unnorm_ses_upper, 
+                                              paste0("higher"), paste0("neutral")))
+table(Ostats_aug3to19_map$unnorm_ses_direction, exclude = NULL)
+Ostats_aug3to19_map$unnorm_ses_diff<-(Ostats_aug3to19_map$overlaps_unnorm_ses-Ostats_aug3to19_map$overlaps_unnorm_ses_lower)
+hist(Ostats_aug3to19_map$unnorm_ses_diff)
+
+Ostats_20plus_map$norm_ses_direction<-ifelse(Ostats_20plus_map$overlaps_norm_ses<Ostats_20plus_map$overlaps_norm_ses_lower, 
+                                        paste0("lower"), ifelse(
+                                          Ostats_20plus_map$overlaps_norm_ses>Ostats_20plus_map$overlaps_norm_ses_upper, 
+                                          paste0("higher"), paste0("neutral")))
+table(Ostats_20plus_map$norm_ses_direction, exclude = NULL)
+Ostats_20plus_map$norm_ses_diff<-(Ostats_20plus_map$overlaps_norm_ses-Ostats_20plus_map$overlaps_norm_ses_lower)
+hist(Ostats_20plus_map$norm_ses_diff)
+
+Ostats_20plus_map$unnorm_ses_direction<-ifelse(Ostats_20plus_map$overlaps_unnorm_ses<Ostats_20plus_map$overlaps_unnorm_ses_lower, 
+                                                 paste0("lower"), ifelse(
+                                                   Ostats_20plus_map$overlaps_unnorm_ses>Ostats_20plus_map$overlaps_unnorm_ses_upper, 
+                                                   paste0("higher"), paste0("neutral")))
+table(Ostats_20plus_map$unnorm_ses_direction, exclude = NULL)
+Ostats_20plus_map$unnorm_ses_diff<-(Ostats_20plus_map$overlaps_unnorm_ses-Ostats_20plus_map$overlaps_unnorm_ses_lower)
+hist(Ostats_20plus_map$unnorm_ses_diff)
+
 #### Plots ####
+
+#Single Site
+png("./Figures/Overlap/GRSM_OstatsUnedited.png", units = "in", width = 20, height = 11, res=300)
+Ostats_plot(plots = elytraDF$siteID, 
+            sp = elytraDF$scientificName_Species, 
+            traits = elytraDF$log_dist_cm, 
+            use_plots = "GRSM", 
+            name_x = 'log10(Elytra Length (cm))', 
+            means = FALSE,
+            legend = TRUE,
+            n_col = 6,
+            scale = "free_y")
+dev.off()
+
+WREF
+
+png("./Figures/Overlap/GRSMplots_OstatsUnedited.png", units = "in", width = 20, height = 11, res=300)
+Ostats_plot(plots = elytraDF$plotID, 
+            sp = elytraDF$scientificName_Species, 
+            traits = elytraDF$log_dist_cm, 
+            use_plots = c("GRSM_001", "GRSM_006", "GRSM_008", "GRSM_012", "GRSM_013",
+                          "GRSM_014", "GRSM_020" ,"GRSM_021", "GRSM_022", "GRSM_024"), 
+            name_x = 'log10(Elytra Length (cm))', 
+            means = FALSE,
+            legend = FALSE,
+            scale = "free_y",
+            n_col = 5)
+dev.off()
+
+png("./Figures/Overlap/WREF_009_OstatsUnedited.png", units = "in", width = 20, height = 11, res=300)
+Ostats_plot(plots = elytraDF$plotID, 
+            sp = elytraDF$scientificName_Species, 
+            traits = elytraDF$log_dist_cm, 
+            use_plots = c("WREF_009"), 
+            name_x = 'log10(Elytra Length (cm))', 
+            means = FALSE,
+            legend = FALSE,
+            scale = "free_y",
+            n_col = 5)
+dev.off()
+
+png("./Figures/Overlap/GRSMplots_OstatsUnedited.png", units = "in", width = 20, height = 11, res=300)
+Ostats_plot(plots = elytraDF$siteID, 
+            sp = elytraDF$scientificName_Species, 
+            traits = elytraDF$log_dist_cm, 
+            use_plots = c("BARR","OSBS"), 
+            name_x = 'log10(Elytra Length (cm))', 
+            means = FALSE,
+            legend = FALSE,
+            scale = "free_y",
+            limits_x = c(0.5, 1),
+            n_col = 5)
+dev.off()
+
 png("./Figures/Overlap/OstatsUnedited.png", units = "in", width = 20, height = 11, res=300)
 Ostats_plot(plots = elytraDF$siteID, 
             sp = elytraDF$scientificName_Species, 
@@ -549,6 +740,21 @@ Ostats_plot(plots = all_elytra_aug$siteID,
             limits_x = c(0,1))
 # dev.off()
 
+plot_dat <- Ostats_unedited_map %>%
+  arrange(overlaps_unnorm_ses) %>%
+  mutate(site = factor(row_number(), levels = row_number()))
+
+ggplot(plot_dat,
+       aes(y = reorder(site, overlaps_unnorm_ses),
+           x = overlaps_unnorm_ses)) +
+  
+  geom_errorbarh(aes(xmin = overlaps_unnorm_ses_lower,
+                     xmax = overlaps_unnorm_ses_upper),
+                 height = 0) +
+  
+  geom_point(size = 2,
+             colour = "red")
+
 #### Map of overlaps ####
 # Convert state map to dataframe
 states_map <- map_data("state")
@@ -557,9 +763,9 @@ ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group)
                         fill = "gray95",
                         color = "gray70",
                         linewidth = 0.2) +
-  geom_sf(data = Ostats_map, aes(color = log(log_dist_cm)),   # Site points
+  geom_sf(data = Ostats_unedited_map, aes(color = overlaps_norm),   # Site points
           size = 6, alpha = 0.9, inherit.aes = FALSE) +
-  geom_text_repel(data = Ostats_map, aes(label = site_id, geometry = geometry), # Site labels
+  geom_text_repel(data = Ostats_unedited_map, aes(label = site_id, geometry = geometry), # Site labels
                   stat = "sf_coordinates", size = 3,
                   min.segment.length = 0, segment.color = NA,
                   seed = 42, inherit.aes = FALSE) +
@@ -569,7 +775,7 @@ ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group)
   theme(panel.grid = element_blank(),
         legend.position = "right") +
   labs(title = "Site Locations",
-       subtitle = "Points colored by overlap",
+       subtitle = "Points colored by Unedited overlap",
        x = NULL,
        y = NULL)
 
@@ -577,7 +783,7 @@ ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group)
                         fill = "gray95",
                         color = "gray70",
                         linewidth = 0.2) +
-  geom_sf(data = subset(Ostats_aug_map), aes(color = log10(log_dist_cm)),   # Site points
+  geom_sf(data = subset(Ostats_aug_map, site_id!="ONAQ"), aes(color = overlaps_norm),   # Site points
           size = 6, alpha = 0.9, inherit.aes = FALSE) +
   geom_text_repel(data = subset(Ostats_aug_map), aes(label = site_id, geometry = geometry), # Site labels
                   stat = "sf_coordinates", size = 3,
@@ -589,13 +795,122 @@ ggplot() + geom_polygon(data = states_map, aes(x = long, y = lat, group = group)
   theme(panel.grid = element_blank(),
         legend.position = "right") +
   labs(title = "Site Locations",
-       subtitle = "Points colored by overlap",
+       subtitle = "Points colored by Augmented overlap",
        x = NULL,
        y = NULL)
+
+# Convert state map to dataframe
+library(tigris)
+states_map <- states(cb = TRUE, year = 2024)
+
+dataDescrip<-c("Unedited Data","Augmented 1 to 19", "Augmented 3 to 19", "Subset >20")
+dataframes<-c("Ostats_unedited_map","Ostats_aug_map","Ostats_aug3to19_map","Ostats_20plus_map")
+datacodes<-c("Unedited","Aug1to19","Aug3to19","20plus")
+
+
+overlap_max<-max(Ostats_unedited_map$overlaps_norm, Ostats_aug_map$overlaps_norm, Ostats_aug3to19_map$overlaps_norm, Ostats_20plus_map$overlaps_norm, na.rm = TRUE)
+
+i<-4
+plot_dat <- cbind(Ostats_20plus_map,
+                  st_coordinates(Ostats_20plus_map))
+
+xlim <- range(plot_dat$X, na.rm = TRUE) + c(-11, 5)
+ylim <- range(plot_dat$Y, na.rm = TRUE) + c(-5, 5)
+
+png(paste0("./Figures/Overlap/Sites/Maps/",datacodes[i],"OverlapMap.png"), units = "in", width = 11, height = 6, res=300)
+ggplot() +
+  geom_sf(data = states_map,
+          fill = "gray95",
+          color = "gray70",
+          linewidth = 0.2) +
+  geom_point(data = plot_dat,
+             aes(X, Y, color = overlaps_norm),
+             # position = position_jitter(width = 1.2, height = 1.2),
+             size = 4) +
+  scale_color_viridis_c(name = "Overlap", option = "magma") +
+  coord_sf(
+    xlim = xlim,
+    ylim = ylim,
+    expand = FALSE) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid = element_blank(),
+        legend.position = "right") +
+  labs(title = "Plot Locations",
+       subtitle = paste0("Points colored by overlap (",dataDescrip[i],")"),
+       x = NULL,
+       y = NULL)
+dev.off()
+
+png(paste0("./Figures/Overlap/Sites/Maps/",datacodes[i],"EffectSizeMap.png"), units = "in", width = 11, height = 6, res=300)
+ggplot() +
+  geom_sf(data = states_map,
+          fill = "gray95",
+          color = "gray70",
+          linewidth = 0.2) +
+  geom_point(data = subset(plot_dat, ses_diff<0),
+             aes(X, Y, color = ses_diff),
+             # position = position_jitter(width = 1.2, height = 1,2),
+             size = 4) +
+  geom_point(data = subset(plot_dat, is.na(ses_diff)),
+             aes(X, Y), colour = "gray60",
+             # position = position_jitter(width = 1.2, height = 1,2),
+             ) +
+  geom_point(data = subset(plot_dat, ses_diff>=0),
+             aes(X, Y), color = "pink",
+             # position = position_jitter(width = 1.2, height = 1,2),
+             size = 4) +
+  coord_sf(xlim = xlim,
+           ylim = ylim,
+           expand = FALSE) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid = element_blank(),
+        legend.position = "right") +
+  labs(title = "Plot Locations",
+       subtitle = paste0("Points colored by Effect Size - CI Lower Bound \n (",dataDescrip[i],")"),
+       x = NULL,
+       y = NULL,
+       color = "Effect Size \n Difference")
+dev.off()
+
 
 #### Write out data 
 write.csv(Ostats_unedited_map, "./Outputs/Site_Ostats_unedited.csv", row.names = FALSE)
 write.csv(Ostats_aug_map, "./Outputs/Site_Ostats_augmented.csv", row.names = FALSE)
 write.csv(Ostats_aug3to19_map, "./Outputs/Site_Ostats_augmented3to19.csv", row.names = FALSE)
-write.csv(Ostats_map, "./Outputs/Site_Ostats_20plus.csv", row.names = FALSE)
+write.csv(Ostats_20plus_map, "./Outputs/Site_Ostats_20plus.csv", row.names = FALSE)
 
+Ostats_unedited_map<-read.csv("./Outputs/Site_Ostats_unedited.csv")
+
+dim(Ostats_unedited_map)
+dim(Ostats_aug_map)
+dim(Ostats_aug3to19_map)
+dim(Ostats_20plus_map)
+
+Ostats_merge<-merge(Ostats_unedited_map, as.data.frame(Ostats_20plus$overlaps_norm), by.x="site_id", by.y=0, all.x=TRUE)
+dim(Ostats_merge)
+colnames(Ostats_merge)<-c(colnames(Ostats_merge)[1:52], "Overlap_20plus", "geometry")
+colnames(Ostats_merge)
+Ostats_merge<-merge(Ostats_merge, as.data.frame(Ostats_aug$overlaps_norm), by.x="site_id", by.y=0, all.x=TRUE)
+Ostats_merge<-merge(Ostats_merge, as.data.frame(Ostats_aug3to19$overlaps_norm), by.x="site_id", by.y=0, all.x=TRUE)
+colnames(Ostats_merge)
+colnames(Ostats_merge)<-c(colnames(Ostats_merge)[1:53], "Overlap_aug1to19", "Overlap_aug3to19", "geometry")
+
+plot(Ostats_merge$overlaps_norm~Ostats_merge$Overlap_20plus)
+plot(Ostats_merge$overlaps_norm~Ostats_merge$Overlap_aug1to19)
+plot(Ostats_merge$overlaps_norm~Ostats_merge$Overlap_aug3to19)
+plot(Ostats_merge$Overlap_aug1to19~Ostats_merge$Overlap_aug3to19)
+
+
+plot(log(Ostats_merge$overlaps_norm)~log(Ostats_merge$Overlap_20plus))
+plot(log(Ostats_merge$overlaps_norm)~log(Ostats_merge$Overlap_aug1to19))
+plot(log(Ostats_merge$overlaps_norm)~log(Ostats_merge$Overlap_aug3to19))
+plot(log(Ostats_merge$Overlap_aug1to19)~log(Ostats_merge$Overlap_aug3to19))
+
+Ostats_merge$diff_og_20plus<-Ostats_merge$overlaps_norm-Ostats_merge$Overlap_20plus
+Ostats_merge$diff_og_aug1to19<-Ostats_merge$overlaps_norm-Ostats_merge$Overlap_aug1to19
+Ostats_merge$diff_og_aug3to19<-Ostats_merge$overlaps_norm-Ostats_merge$Overlap_aug3to19
+Ostats_merge$diff_aug1to19_aug3to19<-Ostats_merge$Overlap_aug1to19-Ostats_merge$Overlap_aug3to19
+
+hist(Ostats_merge$diff_og_20plus)
+hist(Ostats_merge$diff_og_aug1to19)
+hist(Ostats_merge$diff_og_aug3to19)

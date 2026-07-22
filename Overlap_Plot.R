@@ -426,9 +426,6 @@ Ostats_aug <- Ostats(traits = as.matrix(all_elytra_aug[,'log_dist_cm', drop = FA
 
 hist(Ostats_20plus$overlaps_norm)
 hist(Ostats_aug$overlaps_norm)
-Ostats_aug_map<-merge(neon_location_BET, Ostats_aug$overlaps_norm, by.x="plotID", by.y = "row.names")
-Ostats_aug_map <- Ostats_aug_map %>%
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
 head(as.data.frame(Ostats_aug))
 Ostats_aug_df<-as.data.frame(Ostats_aug)
@@ -483,9 +480,6 @@ Ostats_aug3to19 <- Ostats(traits = as.matrix(all_elytra_aug3to19[,'log_dist_cm',
                      plots = factor(all_elytra_aug3to19$plotID),
                      random_seed = 517)
 
-Ostats_aug3to19_map<-merge(neon_location_BET, Ostats_aug3to19$overlaps_norm, by.x="plotID", by.y = "row.names")
-Ostats_aug3to19_map <- Ostats_aug3to19_map %>%
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
 head(as.data.frame(Ostats_aug3to19))
 Ostats_aug3to19_df<-as.data.frame(Ostats_aug3to19)
