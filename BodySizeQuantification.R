@@ -12,6 +12,11 @@ cutoff<-50
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
 all_elytra<-read.csv("./Data/BodysizeCombinedClean.csv")
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D10.016322")
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D08.002280")
+all_elytra<-subset(all_elytra, imageID!="MLBS_009.S.20180522.jpg")
+all_elytra<-subset(all_elytra, imageID!="MLBS_009.E.20180522.CARABIDS.01.jpg")
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.003475")
 
 #Distribution of Mean Body Size in Carabids####
 ElytraSummary<- all_elytra %>%
@@ -82,10 +87,11 @@ dat <- ElytraSummary_n %>%
   arrange(kurtosis) %>%
   mutate(rank = row_number())
 dat$kurtosisLower<-dat$kurtosis - 1.96*as.numeric(dat$kurtosisSE)
-dat$sig<-ifelse((dat$kurtosis - 1.96*dat$kurtosisSE)>0 | (dat$kurtosis + 1.96*dat$kurtosisSE)<0,
-                paste0("*"),NA)
+dat$sig<-ifelse((dat$kurtosis - 1.96*dat$kurtosisSE)>0, paste0("peaked"),
+                ifelse((dat$kurtosis + 1.96*dat$kurtosisSE)<0,
+                paste0("flattened"),NA))
 
-#png("./Figures/BodySizeQuantification/SpeciesDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
 ggplot(dat, aes(kurtosis, rank, colour = sig)) +
   geom_errorbarh(aes(xmin = kurtosis - 1.96*kurtosisSE,
                      xmax = kurtosis + 1.96*kurtosisSE),
@@ -101,7 +107,9 @@ ggplot(dat, aes(kurtosis, rank, colour = sig)) +
        x = "Kurtosis",
        y = "Rank",
        caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))+
-  theme(legend.position = "None")
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.85, 0.5))+
+  guides(color = guide_legend(title = "Significance"))
 dev.off()
 
 #png("./Figures/BodySizeQuantification/SpeciesDistribution_KurtosisHigh.png", units = "in", width = 3, height = 3, res=300, bg = "transparent")
@@ -240,9 +248,10 @@ ggplot(data = subset(species_plot_stats, n>=cutoff), aes(skew)) +
 dat <- species_plot_stats %>%
   arrange(kurtosis) %>%
   mutate(rank = row_number())
-dat$sig<-ifelse((dat$kurtosis - 1.96*dat$kurtosisSE)>0 | (dat$kurtosis + 1.96*dat$kurtosisSE)<0,
-                paste0("*"),NA)
-#png("./Figures/BodySizeQuantification/plotDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
+dat$sig<-ifelse((dat$kurtosis - 1.96*dat$kurtosisSE)>0, paste0("peaked"),
+                ifelse((dat$kurtosis + 1.96*dat$kurtosisSE)<0,
+                       paste0("flattened"),NA))
+png("./Figures/BodySizeQuantification/plotDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
 ggplot(subset(dat, n>=cutoff), aes(kurtosis, rank, colour = sig)) +
   geom_errorbarh(aes(xmin = kurtosis - 1.96*kurtosisSE,
                      xmax = kurtosis + 1.96*kurtosisSE),
@@ -258,14 +267,20 @@ ggplot(subset(dat, n>=cutoff), aes(kurtosis, rank, colour = sig)) +
        x = "Kurtosis",
        y = "Rank",
        caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))+
-  theme(legend.position = "None")
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.85, 0.5)) +
+  guides(color = guide_legend(title = "Significance"))
 dev.off()
+
+
 dat <- species_site_stats %>%
   arrange(kurtosis) %>%
   mutate(rank = row_number())
-dat$sig<-ifelse((dat$kurtosis - 1.96*dat$kurtosisSE)>0 | (dat$kurtosis + 1.96*dat$kurtosisSE)<0,
-                paste0("*"),NA)
-#png("./Figures/BodySizeQuantification/siteDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
+dat$sig<-ifelse((dat$kurtosis - 1.96*dat$kurtosisSE)>0, paste0("peaked"),
+                ifelse((dat$kurtosis + 1.96*dat$kurtosisSE)<0,
+                       paste0("flattened"),NA))
+
+png("./Figures/BodySizeQuantification/siteDistribution_Kurtosis.png", units = "in", width = 6, height = 5, res=300)
 ggplot(subset(dat, n>=cutoff), aes(kurtosis, rank, colour = sig)) +
   geom_errorbarh(aes(xmin = kurtosis - 1.96*kurtosisSE,
                      xmax = kurtosis + 1.96*kurtosisSE),
@@ -281,7 +296,9 @@ ggplot(subset(dat, n>=cutoff), aes(kurtosis, rank, colour = sig)) +
        x = "Kurtosis",
        y = "Rank",
        caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))+
-  theme(legend.position = "None")
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.85, 0.5))+
+  guides(color = guide_legend(title = "Significance"))
 dev.off()
 
 
@@ -451,6 +468,19 @@ summary<-var_all_scales %>%
   ungroup()
 
 summary
+write.csv(summary, "./Outputs/CVpctSummary.csv", row.names = FALSE)
+
+library(lme4)
+library(lmerTest)
+library(emmeans)
+mod <- lmer(cv2_pct ~ scale + (1|scientificName_Species),
+            data = var_all_scales)
+
+anova(mod)
+summary(mod)
+emmeans(mod, pairwise ~ scale)
+
+
 #png("./Figures/BodySizeQuantification/CV_Nested.png", units = "in", width = 7, height = 6, res=300)
 ggplot(var_all_scales,
        aes(cv2_pct)) +
@@ -466,6 +496,13 @@ ggplot(var_all_scales,
   labs(title = "Variance in bodysize as % of mean across nested spatial scales",
        caption = paste0("Subset to obersvations of species with >",cutoff," individuals"))
 dev.off()
+
+ggplot(var_all_scales,
+       aes(scale, cv2_pct)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  geom_jitter(width = 0.15,
+              alpha = 0.2) +
+  theme_pubr()
 
 #png("./Figures/NestedCVpct.png", height = 10, width = 10, units = "in", res = 300)
 ggplot(subset(var_all_scales, scientificName_Species!="Carabidae sp."),
@@ -516,7 +553,7 @@ domList<-subset(domain_species_var, scientificName_Species==species &
 domList<-unique(domList$domainID)
 domList<-"D07"
 
-#png("./Figures/BodySizeQuantification/SpeciesNestedDensityPlots.png", units = "in", width = 4, height = 10, res=300)
+png("./Figures/BodySizeQuantification/SpeciesNestedDensityPlots.png", units = "in", width = 4, height = 10, res=300)
 annotate_figure(
   ggarrange(
     ggplot(data = subset(all_elytra, scientificName_Species==species),
@@ -547,8 +584,8 @@ annotate_figure(
                    filter(domainID %in% domList),
                  aes(xintercept = mean_cm,
                      colour = siteID)) +
-      scale_fill_manual(values=c("#990000", "#006699")) +
-      scale_color_manual(values=c("#990000", "#006699")) +
+      scale_fill_manual(values=c("#006699", "#990000")) +
+      scale_color_manual(values=c("#006699", "#990000")) +
       xlab(NULL) +
       theme_pubr()+
       theme(legend.position = "inside",
@@ -568,14 +605,14 @@ annotate_figure(
                      color = plotID)) +
       scale_fill_manual(values=c("#00CCCC", "#009999", "#3399cc",
                             "#3366cc", "#0000ff", "#33ccff",
-                            "#0099cc", "#0066ff", "red",
+                            "#0099cc", "#0066ff", "cyan2",
                             "#660000", "#990000", "#cc3333",
                             "#ff0000", "#cc3300", "#ff6666",
                             "#ff6600", "#cc0033", "#fc4e2a",
                             "#d23428")) +
       scale_color_manual(values=c("#00CCCC", "#009999", "#3399cc",
                                  "#3366cc", "#0000ff", "#33ccff",
-                                 "#0099cc", "#0066ff", "red",
+                                 "#0099cc", "#0066ff", "cyan2",
                                  "#660000", "#990000", "#cc3333",
                                  "#ff0000", "#cc3300", "#ff6666",
                                  "#ff6600", "#cc0033", "#fc4e2a",
@@ -589,6 +626,84 @@ annotate_figure(
       ylab("Plot Density") +
       xlab("Elytra Length (cm)"),
       # facet_wrap(.~domainID),
+    nrow = 3
+  )
+)
+dev.off()
+
+png("./Figures/BodySizeQuantification/SpeciesNestedDensityPlotsLegend.png", units = "in", width = 8, height = 10, res=300)
+annotate_figure(
+  ggarrange(
+    ggplot(data = subset(all_elytra, scientificName_Species==species),
+           aes(x=cm_elytra_max_length, fill = domainID)) +
+      geom_density(alpha=0.5, fill="#660033") +
+      geom_rug(colour = "#660033") +
+      geom_vline(data = subset(domain_species_var %>%
+                                 filter(domainID %in% domList), 
+                               scientificName_Species==species &
+                                 n>=cutoff),
+                 aes(xintercept = mean_cm),
+                 col="#660033") +
+      ylab("Domain Density") +
+      xlab(NULL) +
+      labs(title=species) +
+      theme_pubr()+
+      theme(legend.position="right"),
+    # facet_wrap(.~domainID),
+    ggplot(data = subset(all_elytra, scientificName_Species==species)%>%
+             filter(siteID %in% siteList) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill = siteID)) +
+      geom_density(alpha=.5) +
+      geom_rug(aes(colour = siteID)) +
+      geom_vline(data = subset(site_species_var, scientificName_Species==species &
+                                 n>=cutoff)%>%
+                   filter(siteID %in% siteList) %>%
+                   filter(domainID %in% domList),
+                 aes(xintercept = mean_cm,
+                     colour = siteID)) +
+      scale_fill_manual(values=c("#006699", "#990000")) +
+      scale_color_manual(values=c("#006699", "#990000")) +
+      xlab(NULL) +
+      theme_pubr()+
+      theme(legend.position = "inside",
+            legend.position.inside = c(0.85, 0.85)) +
+      ylab("Plot Density"),
+    ggplot(data = subset(all_elytra, scientificName_Species==species) %>%
+             filter(plotID %in% plotList) %>%
+             filter(domainID %in% domList),
+           aes(x=cm_elytra_max_length, fill= plotID)) +
+      geom_density(alpha=0.2) +
+      geom_rug(aes(colour = plotID)) +
+      geom_vline(data = subset(plot_species_var, scientificName_Species==species &
+                                 n>=cutoff) %>%
+                   filter(plotID %in% plotList) %>%
+                   filter(domainID %in% domList),
+                 aes(xintercept = mean_cm,
+                     color = plotID)) +
+      scale_fill_manual(values=c("#00CCCC", "#009999", "#3399cc",
+                                 "#3366cc", "#0000ff", "#33ccff",
+                                 "#0099cc", "#0066ff", "cyan2",
+                                 "#660000", "#990000", "#cc3333",
+                                 "#ff0000", "#cc3300", "#ff6666",
+                                 "#ff6600", "#cc0033", "#fc4e2a",
+                                 "#d23428")) +
+      scale_color_manual(values=c("#00CCCC", "#009999", "#3399cc",
+                                  "#3366cc", "#0000ff", "#33ccff",
+                                  "#0099cc", "#0066ff", "cyan2",
+                                  "#660000", "#990000", "#cc3333",
+                                  "#ff0000", "#cc3300", "#ff6666",
+                                  "#ff6600", "#cc0033", "#fc4e2a",
+                                  "#d23428")) +
+      theme_pubr() +
+      theme(legend.position = "none") +
+      theme(legend.position = "inside",
+            legend.position.inside = c(0.5, 0.85)) +
+      guides(color = guide_legend(ncol = 5),
+             fill = guide_legend(ncol = 5)) +
+      ylab("Plot Density") +
+      xlab("Elytra Length (cm)"),
+    # facet_wrap(.~domainID),
     nrow = 3
   )
 )
