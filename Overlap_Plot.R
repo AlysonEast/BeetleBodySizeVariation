@@ -17,6 +17,7 @@ Beetle_dpID <- "DP1.10022.001"
 #### READ IN CLEAN DATA ####
 all_elytra<-read.csv("./Data/BodysizeCombinedClean.csv")
 all_elytra<-subset(all_elytra, yearCollected==2018 | yearCollected==2019)
+meta<-read.csv("./Data/NEON_Field_Site_Metadata_20260130.csv")
 
 #### Explore the data ####
 # Get unique siteID levels ordered by latitude
@@ -143,7 +144,9 @@ Ostats_20plus_map <- Ostats_20plus_map %>%
 #      observed mean-variance scaling.
 # -------------------------------------------------------------------------
 # Average CV² (%) estimated from well-sampled species-site combinations
-typical_cvpct <- 0.487
+cv_reslults<-read.csv("./Outputs/CVpctSummary.csv")
+typical_cvpct <- cv_reslults[4,"mean_cvpct"]
+print(typical_cvpct)
 
 # Convert percentage to proportion
 cv2 <- typical_cvpct / 100

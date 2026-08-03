@@ -21,6 +21,7 @@ Beetle_dpID <- "DP1.10022.001"
 #### READ IN CLEAN DATA ####
 all_elytra<-read.csv("./Data/BodysizeCombinedClean.csv")
 all_elytra<-subset(all_elytra, yearCollected==2018 | yearCollected==2019)
+meta<-read.csv("./Data/NEON_Field_Site_Metadata_20260130.csv")
 
 #### Explore the data ####
 # Get unique siteID levels ordered by latitude
@@ -156,7 +157,8 @@ Ostats_20plus_map <- Ostats_20plus_map %>%
 #      observed mean-variance scaling.
 # -------------------------------------------------------------------------
 # Average CV² (%) estimated from well-sampled species-site combinations
-typical_cvpct <- 0.506
+cv_reslults<-read.csv("./Outputs/CVpctSummary.csv")
+typical_cvpct <- cv_reslults[3,"mean_cvpct"]
 
 # Convert percentage to proportion
 cv2 <- typical_cvpct / 100
@@ -378,7 +380,9 @@ Ostats_plot(plots = elytraDF$siteID,
             means = FALSE,
             legend = TRUE,
             n_col = 6,
-            scale = "free_y")
+            scale = "free_y") +
+  guides(color = guide_legend(ncol = 1))
+
 dev.off()
 
 WREF
@@ -396,7 +400,7 @@ Ostats_plot(plots = elytraDF$plotID,
             n_col = 5)
 dev.off()
 
-png("./Figures/Overlap/WREF_009_OstatsUnedited.png", units = "in", width = 20, height = 11, res=300)
+png("./Figures/Overlap/WREF_009_OstatsUnedited.png", units = "in", width = 20, height = 11, res=300, bg = "transparent")
 Ostats_plot(plots = elytraDF$plotID, 
             sp = elytraDF$scientificName_Species, 
             traits = elytraDF$log_dist_cm, 
