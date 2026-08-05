@@ -32,25 +32,6 @@ table(subset(all_elytra, siteID=="STER")$plotID)
 sort(table(subset(all_elytra, siteID=="STER")$scientificName_Species))
 table(subset(all_elytra, siteID=="STER")$scientificName_Species, subset(all_elytra, siteID=="STER")$plotID)
 
-# ggarrange(nrow=4,
-#           ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-#             geom_density(alpha=0.5) +
-#             #  theme(legend.position="none") +
-#             facet_wrap(.~siteID, scales = "free_y"),
-#           ggplot(data = subset(all_elytra, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-#             geom_density(alpha=0.5) +
-#             #  theme(legend.position="0") +
-#             facet_wrap(.~plotID, scales = "free_y"),
-#           ggplot(data = subset(all_elytra_site50, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-#             geom_density(alpha=0.5) +
-#             #  theme(legend.position="none") +
-#             facet_wrap(.~siteID, scales = "free_y"),
-#           ggplot(data = subset(all_elytra_plot50, siteID=="STER"), aes(x=log_dist_cm, fill = scientificName_Species)) +
-#             geom_density(alpha=0.5) +
-#             #  theme(legend.position="0") +
-#             facet_wrap(.~plotID, scales = "free_y")
-# )
-
 #### OStats for the site level
 #### Overlap Stats ####
 library(Ostats)
@@ -61,7 +42,8 @@ elytraDF<-all_elytra[,c("domainID","siteID","plotID","scientificName_Species","l
 Ostats_unedited <- Ostats(traits = as.matrix(elytraDF[,'log_dist_cm', drop = FALSE]),
                         sp = factor(elytraDF$scientificName_Species),
                         plots = factor(elytraDF$plotID),
-                        random_seed = 517)
+                        random_seed = 517,
+                        swap_means = TRUE)
 
 as.data.frame(Ostats_unedited$overlaps_norm)
 Ostats_unedited$overlaps_norm_ses
@@ -94,7 +76,8 @@ plot20plus_elytraDF<-all_elytra_plot50[,c("domainID","siteID","plotID","scientif
 Ostats_20plus <- Ostats(traits = as.matrix(plot20plus_elytraDF[,'log_dist_cm', drop = FALSE]),
                          sp = factor(plot20plus_elytraDF$scientificName_Species),
                          plots = factor(plot20plus_elytraDF$plotID),
-                         random_seed = 517)
+                         random_seed = 517,
+                        swap_means = TRUE)
 
 as.data.frame(Ostats_20plus$overlaps_norm)
 Ostats_20plus$overlaps_norm_ses
@@ -219,7 +202,8 @@ all_elytra_aug$log_dist_cm<-log10(all_elytra_aug$cm_elytra_max_length)
 Ostats_aug <- Ostats(traits = as.matrix(all_elytra_aug[,'log_dist_cm', drop = FALSE]),
                          sp = factor(all_elytra_aug$scientificName_Species),
                          plots = factor(all_elytra_aug$plotID),
-                         random_seed = 517)
+                         random_seed = 517,
+                     swap_means = TRUE)
 
 hist(Ostats_20plus$overlaps_norm)
 hist(Ostats_aug$overlaps_norm)
@@ -275,7 +259,8 @@ all_elytra_aug3to19$log_dist_cm<-log10(all_elytra_aug3to19$cm_elytra_max_length)
 Ostats_aug3to19 <- Ostats(traits = as.matrix(all_elytra_aug3to19[,'log_dist_cm', drop = FALSE]),
                      sp = factor(all_elytra_aug3to19$scientificName_Species),
                      plots = factor(all_elytra_aug3to19$plotID),
-                     random_seed = 517)
+                     random_seed = 517,
+                     swap_means = TRUE)
 
 
 head(as.data.frame(Ostats_aug3to19))
