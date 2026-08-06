@@ -39,6 +39,7 @@
 library(Ostats)   # community_overlap()
 library(dplyr)
 library(tidyr)
+library(dplyr)
 
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
@@ -48,8 +49,8 @@ source("./community_overlap_weighted.R")
 
 
 #### 0. SETTINGS ####
-LEVEL <- "plot"     # "plot" or "site"
-POOL  <- "site"     # "site" or "domain"
+LEVEL <- "site"     # "plot" or "site"
+POOL  <- "all"     # "site" or "domain" or "all"
 
 NPERM   <- 99
 NULLQS  <- c(0.025, 0.975)
@@ -64,13 +65,15 @@ metric_names <- c("overlap_norm", "overlap_unnorm", "niche_range", "sdnnd", "min
 # translate the LEVEL / POOL choices into column names and the CV scale to use
 if (LEVEL == "plot") { FOCAL_COL <- "plotID"; CV_SCALE <- "Plot Level" }
 if (LEVEL == "site") { FOCAL_COL <- "siteID"; CV_SCALE <- "Site Level" }
-POOL_COL   <- if (POOL == "site") "siteID" else "domainID"
+POOL_COL   <- if (POOL == "site") "siteID" else 
+  if (POOL == "domain") "domainID" else "all"
 OUT_PREFIX <- paste0(LEVEL, "_by_", POOL)     # e.g. "plot_by_site"
 
 
 #### 1. READ CLEAN DATA ####
 all_elytra <- read.csv("./Data/BodysizeCombinedClean.csv")
 all_elytra <- subset(all_elytra, yearCollected == 2018 | yearCollected == 2019)
+all_elytra$all<-"all"
 
 # Drop specimens with no species label (NA or blank ""). A blank name is not a
 # real species: it survives %in% filters and silently becomes a pseudo-species in
@@ -112,7 +115,7 @@ sim_low_n <- low_n %>%
          meanlog  = log(mean_dist) - (sdlog^2 / 2),
          sim_vals = list(rlnorm(n = n_to_add, meanlog = meanlog, sdlog = sdlog))) %>%
   unnest(cols = sim_vals) %>%
-  rename(cm_elytra_max_length = sim_vals) %>%
+  dplyr::rename(cm_elytra_max_length = sim_vals) %>%
   select(all_of(c("scientificName_Species", FOCAL_COL)), cm_elytra_max_length) %>%
   ungroup()
 
@@ -129,6 +132,9 @@ if (LEVEL == "plot") {
 } else {
   aug <- merge(aug, site_to_domain, by = "siteID", all.x = TRUE)   # + domainID
 }
+if (POOL == "all") { 
+  aug$all<-"all"
+  }
 aug$FOCAL <- aug[[FOCAL_COL]]     # generic working columns used below
 aug$POOL  <- aug[[POOL_COL]]
 
@@ -170,7 +176,7 @@ obs_keys     <- unique(paste(aug$FOCAL, aug$scientificName_Species, sep = "|"))
 missing_keys <- obs_keys[is.na(abund_lookup[obs_keys])]
 if (length(missing_keys))
   message("NOTE: ", length(missing_keys), " observed (focal|species) combos have no true abundance ",
-          "and drop from the weighted metrics. e.g. ", paste(utils::head(missing_keys, 3), collapse = "; "))
+          "and drop from the weighted metrics. e.g. ", paste(missing_keys, collapse = "; "))
 
 
 #### HELPER: the five metrics for one community ####
@@ -221,14 +227,14 @@ for (r in seq_along(focal_units)) {
   f  <- focal_units[r]
   in_focal <- aug$FOCAL == f
   in_pool  <- aug$POOL  == pool_results$POOL[r]
-  
+
   traits_obs  <- aug$log_dist_cm[in_focal];  sp_obs  <- aug$scientificName_Species[in_focal]
   traits_pool <- aug$log_dist_cm[in_pool];   sp_pool <- aug$scientificName_Species[in_pool]
-  
+
   # observed metrics (weighted by this focal unit's true abundances)
   abund_f <- abund_for(f, sp_obs)
   obs <- community_metrics(traits_obs, sp_obs, abund_f)
-  
+
   # null draws. Restrict the observed community to species that have a true
   # abundance, then PRESERVE two paired vectors and re-label them to the drawn
   # species: n_ind (individuals sampled -> density shape) and w_obs (true
@@ -253,7 +259,7 @@ for (r in seq_along(focal_units)) {
     abund_null <- setNames(w_obs, drawn)          # observed true-abundance vector, re-labelled
     null_mat[i, ] <- community_metrics(traits_null, sp_null, abund_null)
   }
-  
+
   # summarise observed vs null per metric; if a metric is invariant under this
   # null (sd ~ 0, e.g. spacing metrics under swap_means) report CI = obs, ses = NA
   for (m in metric_names) {
@@ -295,14 +301,14 @@ for (r in seq_along(focal_units)) {
   f  <- focal_units[r]
   in_focal <- aug$FOCAL == f
   in_pool  <- aug$POOL  == indiv_results$POOL[r]
-  
+
   traits_obs  <- aug$log_dist_cm[in_focal];  sp_obs  <- aug$scientificName_Species[in_focal]
   traits_pool <- aug$log_dist_cm[in_pool];   sp_pool <- aug$scientificName_Species[in_pool]
-  
+
   # species (and thus true abundances) are preserved, so use the observed weights
   abund_f <- abund_for(f, sp_obs)
   obs <- community_metrics(traits_obs, sp_obs, abund_f)
-  
+
   null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
                      dimnames = list(NULL, metric_names))
   obs_species <- unique(sp_obs)
@@ -318,7 +324,7 @@ for (r in seq_along(focal_units)) {
     }
     null_mat[i, ] <- community_metrics(traits_null, sp_null, abund_f)
   }
-  
+
   # summarise observed vs null per metric; if a metric is invariant under this
   # null (sd ~ 0, e.g. spacing metrics under swap_means) report CI = obs, ses = NA
   for (m in metric_names) {
@@ -348,83 +354,83 @@ write.csv(indiv_results, paste0("./Outputs/", OUT_PREFIX, "_IndividualNull.csv")
 message("wrote ", OUT_PREFIX, "_IndividualNull.csv  (", nrow(indiv_results), " focal units)")
 
 
-#### 7. NULL MODEL 3: SWAP MEANS (within-community, out-of-the-box Ostats null) ####
-# The mean-swap null from Ostats::Ostats(swap_means = TRUE): within each focal
-# community, keep every species' abundance and its within-species deviations, but
-# relocate each species onto a randomly permuted community mean. This needs NO
-# regional pool (it is a within-community null), so it runs on every focal unit
-# and its result does not depend on POOL -- the output is named by LEVEL only.
-#
-# NOTE: because the SET of species means is only permuted (never changed), the two
-# spacing metrics are invariant by construction -- sdnnd and min_logratio have
-# null CI = observed, ses = NA, dir = "neutral". That is expected, not a bug: this
-# null is only informative for the overlap metrics (and weakly niche_range). We
-# run it on the same focal_units as sections 5-6 so the three files line up; to
-# also cover the pool-excluded units, loop over sort(unique(aug$FOCAL)) instead.
-set.seed(SEED)
-
-swap_results <- data.frame(FOCAL = focal_units, stringsAsFactors = FALSE)
-swap_results$POOL <- focal_pool$POOL[match(swap_results$FOCAL, focal_pool$FOCAL)]
-for (m in metric_names) for (s in c("_obs","_lower","_upper","_ses")) swap_results[[paste0(m, s)]] <- NA_real_
-for (m in metric_names) swap_results[[paste0(m, "_dir")]] <- NA_character_
-
-for (r in seq_along(focal_units)) {
-  f <- focal_units[r]
-  in_focal <- aug$FOCAL == f
-  traits_obs <- aug$log_dist_cm[in_focal];  sp_obs <- aug$scientificName_Species[in_focal]
-  
-  # species (and thus true abundances) are preserved, so use the observed weights
-  abund_f <- abund_for(f, sp_obs)
-  obs <- community_metrics(traits_obs, sp_obs, abund_f)
-  
-  null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
-                     dimnames = list(NULL, metric_names))
-  
-  # swap operates on exactly the community the metrics use: finite traits, species
-  # with >= 2 individuals AND a true abundance. This keeps non-finite / singleton /
-  # unweightable means from leaking a bad value onto a real species when permuted.
-  keep <- is.finite(traits_obs) & !is.na(sp_obs) & sp_obs %in% names(abund_f)
-  tr   <- traits_obs[keep]; spp <- sp_obs[keep]
-  elig <- names(which(table(spp) >= 2))
-  tr   <- tr[spp %in% elig]; spp <- spp[spp %in% elig]
-  
-  if (length(unique(spp)) >= 2) {
-    sp_f  <- factor(spp)                             # index species by position, not by name
-    means <- as.numeric(tapply(tr, sp_f, mean))      # one mean per level, in level order
-    codes <- as.integer(sp_f)                        # each individual's species code
-    devs  <- tr - means[codes]                       # each individual's deviation from its own mean
-    for (i in 1:NPERM) {
-      # ---- permute the community means across species; keep identity/abundance/shape ----
-      means_swapped <- sample(means)
-      traits_null   <- devs + means_swapped[codes]
-      null_mat[i, ] <- community_metrics(traits_null, spp, abund_f)
-    }
-  }
-  
-  # summarise observed vs null per metric; sdnnd and min_logratio are invariant
-  # under swap_means (sd ~ 0) so they report CI = obs, ses = NA (expected, not a bug)
-  for (m in metric_names) {
-    o  <- obs[m]
-    nd <- null_mat[, m]; nd <- nd[is.finite(nd)]
-    swap_results[r, paste0(m, "_obs")] <- o
-    if (length(nd) >= 2 && is.finite(o)) {
-      if (sd(nd) > 1e-9) {
-        lo <- as.numeric(quantile(nd, NULLQS[1])); hi <- as.numeric(quantile(nd, NULLQS[2]))
-        swap_results[r, paste0(m, "_lower")] <- lo
-        swap_results[r, paste0(m, "_upper")] <- hi
-        swap_results[r, paste0(m, "_ses")]   <- (o - mean(nd)) / sd(nd)
-        swap_results[r, paste0(m, "_dir")]   <- if (o < lo) "lower" else if (o > hi) "higher" else "neutral"
-      } else {
-        swap_results[r, paste0(m, "_lower")] <- o
-        swap_results[r, paste0(m, "_upper")] <- o
-        swap_results[r, paste0(m, "_ses")]   <- NA
-        swap_results[r, paste0(m, "_dir")]   <- "neutral"
-      }
-    }
-  }
-}
-
-names(swap_results)[1:2] <- c(FOCAL_COL, POOL_COL)
-swap_results <- merge(swap_results, lat, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)
-write.csv(swap_results, paste0("./Outputs/", LEVEL, "_SwapMeansNull.csv"), row.names = FALSE)
-message("wrote ", LEVEL, "_SwapMeansNull.csv  (", nrow(swap_results), " focal units)")
+# #### 7. NULL MODEL 3: SWAP MEANS (within-community, out-of-the-box Ostats null) ####
+# # The mean-swap null from Ostats::Ostats(swap_means = TRUE): within each focal
+# # community, keep every species' abundance and its within-species deviations, but
+# # relocate each species onto a randomly permuted community mean. This needs NO
+# # regional pool (it is a within-community null), so it runs on every focal unit
+# # and its result does not depend on POOL -- the output is named by LEVEL only.
+# #
+# # NOTE: because the SET of species means is only permuted (never changed), the two
+# # spacing metrics are invariant by construction -- sdnnd and min_logratio have
+# # null CI = observed, ses = NA, dir = "neutral". That is expected, not a bug: this
+# # null is only informative for the overlap metrics (and weakly niche_range). We
+# # run it on the same focal_units as sections 5-6 so the three files line up; to
+# # also cover the pool-excluded units, loop over sort(unique(aug$FOCAL)) instead.
+# set.seed(SEED)
+# 
+# swap_results <- data.frame(FOCAL = focal_units, stringsAsFactors = FALSE)
+# swap_results$POOL <- focal_pool$POOL[match(swap_results$FOCAL, focal_pool$FOCAL)]
+# for (m in metric_names) for (s in c("_obs","_lower","_upper","_ses")) swap_results[[paste0(m, s)]] <- NA_real_
+# for (m in metric_names) swap_results[[paste0(m, "_dir")]] <- NA_character_
+# 
+# for (r in seq_along(focal_units)) {
+#   f <- focal_units[r]
+#   in_focal <- aug$FOCAL == f
+#   traits_obs <- aug$log_dist_cm[in_focal];  sp_obs <- aug$scientificName_Species[in_focal]
+#   
+#   # species (and thus true abundances) are preserved, so use the observed weights
+#   abund_f <- abund_for(f, sp_obs)
+#   obs <- community_metrics(traits_obs, sp_obs, abund_f)
+#   
+#   null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
+#                      dimnames = list(NULL, metric_names))
+#   
+#   # swap operates on exactly the community the metrics use: finite traits, species
+#   # with >= 2 individuals AND a true abundance. This keeps non-finite / singleton /
+#   # unweightable means from leaking a bad value onto a real species when permuted.
+#   keep <- is.finite(traits_obs) & !is.na(sp_obs) & sp_obs %in% names(abund_f)
+#   tr   <- traits_obs[keep]; spp <- sp_obs[keep]
+#   elig <- names(which(table(spp) >= 2))
+#   tr   <- tr[spp %in% elig]; spp <- spp[spp %in% elig]
+#   
+#   if (length(unique(spp)) >= 2) {
+#     sp_f  <- factor(spp)                             # index species by position, not by name
+#     means <- as.numeric(tapply(tr, sp_f, mean))      # one mean per level, in level order
+#     codes <- as.integer(sp_f)                        # each individual's species code
+#     devs  <- tr - means[codes]                       # each individual's deviation from its own mean
+#     for (i in 1:NPERM) {
+#       # ---- permute the community means across species; keep identity/abundance/shape ----
+#       means_swapped <- sample(means)
+#       traits_null   <- devs + means_swapped[codes]
+#       null_mat[i, ] <- community_metrics(traits_null, spp, abund_f)
+#     }
+#   }
+#   
+#   # summarise observed vs null per metric; sdnnd and min_logratio are invariant
+#   # under swap_means (sd ~ 0) so they report CI = obs, ses = NA (expected, not a bug)
+#   for (m in metric_names) {
+#     o  <- obs[m]
+#     nd <- null_mat[, m]; nd <- nd[is.finite(nd)]
+#     swap_results[r, paste0(m, "_obs")] <- o
+#     if (length(nd) >= 2 && is.finite(o)) {
+#       if (sd(nd) > 1e-9) {
+#         lo <- as.numeric(quantile(nd, NULLQS[1])); hi <- as.numeric(quantile(nd, NULLQS[2]))
+#         swap_results[r, paste0(m, "_lower")] <- lo
+#         swap_results[r, paste0(m, "_upper")] <- hi
+#         swap_results[r, paste0(m, "_ses")]   <- (o - mean(nd)) / sd(nd)
+#         swap_results[r, paste0(m, "_dir")]   <- if (o < lo) "lower" else if (o > hi) "higher" else "neutral"
+#       } else {
+#         swap_results[r, paste0(m, "_lower")] <- o
+#         swap_results[r, paste0(m, "_upper")] <- o
+#         swap_results[r, paste0(m, "_ses")]   <- NA
+#         swap_results[r, paste0(m, "_dir")]   <- "neutral"
+#       }
+#     }
+#   }
+# }
+# 
+# names(swap_results)[1:2] <- c(FOCAL_COL, POOL_COL)
+# swap_results <- merge(swap_results, lat, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)
+# write.csv(swap_results, paste0("./Outputs/", LEVEL, "_SwapMeansNull.csv"), row.names = FALSE)
+# message("wrote ", LEVEL, "_SwapMeansNull.csv  (", nrow(swap_results), " focal units)")
