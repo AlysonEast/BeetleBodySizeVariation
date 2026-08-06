@@ -42,6 +42,10 @@ library(tidyr)
 
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
+# abundance-weighted overlap (weights by true, effort-scaled abundance instead of
+# the augmented observation counts). Kept in its own script for readability.
+source("./community_overlap_weighted.R")
+
 
 #### 0. SETTINGS ####
 LEVEL <- "plot"     # "plot" or "site"
@@ -145,13 +149,41 @@ all_elytra$FOCAL <- all_elytra[[FOCAL_COL]]
 lat <- aggregate(latitude ~ FOCAL, data = all_elytra, FUN = mean)
 
 
+#### 4b. LOAD TRUE (EFFORT-SCALED) ABUNDANCES ####
+# One row per focal-unit x species: columns <FOCAL_COL>, scientificName_Species, abund.
+# Keyed as "focal|species" so a community's weight vector is a single lookup.
+abund_tab <- read.csv(if (LEVEL == "plot") "./Data/plot_abund.csv" else "./Data/site_abund.csv")
+abund_lookup <- setNames(abund_tab$abund,
+                         paste(abund_tab[[FOCAL_COL]], abund_tab$scientificName_Species, sep = "|"))
+
+# helper: observed true-abundance vector (species -> abund) for one focal unit,
+# keeping only species that actually have a true abundance
+abund_for <- function(f, species) {
+  species <- unique(as.character(species))
+  a <- abund_lookup[paste(f, species, sep = "|")]
+  a <- setNames(as.numeric(a), species)
+  a[is.finite(a)]
+}
+
+# coverage report: observed species with no true abundance (dropped from the weighted overlap)
+obs_keys     <- unique(paste(aug$FOCAL, aug$scientificName_Species, sep = "|"))
+missing_keys <- obs_keys[is.na(abund_lookup[obs_keys])]
+if (length(missing_keys))
+  message("NOTE: ", length(missing_keys), " observed (focal|species) combos have no true abundance ",
+          "and drop from the weighted metrics. e.g. ", paste(utils::head(missing_keys, 3), collapse = "; "))
+
+
 #### HELPER: the five metrics for one community ####
 # The only function in the script. It is called once for the observed community
 # and once for every null draw, so the metric definitions live in exactly one
 # place. Returns a named vector; NA if fewer than two eligible species.
-community_metrics <- function(traits, sp) {
+# `abund` is a named vector (species -> true, effort-scaled abundance) used to
+# weight the overlaps. Species without a true abundance are dropped from ALL
+# metrics so every focal unit describes one consistent community (coverage is
+# reported up front in section 3b).
+community_metrics <- function(traits, sp, abund) {
   traits <- as.numeric(traits); sp <- as.character(sp)
-  ok <- is.finite(traits) & !is.na(sp) & sp != ""   # drop non-finite traits & missing species labels
+  ok <- is.finite(traits) & !is.na(sp) & sp != "" & sp %in% names(abund)   # need a trait & a true abundance
   traits <- traits[ok]; sp <- sp[ok]
   eligible <- names(which(table(sp) >= 2))          # >=2 individuals, as community_overlap needs
   traits <- traits[sp %in% eligible]; sp <- sp[sp %in% eligible]
@@ -160,9 +192,9 @@ community_metrics <- function(traits, sp) {
            sdnnd = NA, min_logratio = NA)
   if (length(unique(sp)) < 2) return(out)
   
-  # overlaps (same community_overlap() used for the observed O-stats)
-  out["overlap_norm"]   <- community_overlap(as.matrix(traits), factor(sp), normal = TRUE)
-  out["overlap_unnorm"] <- community_overlap(as.matrix(traits), factor(sp), normal = FALSE)
+  # overlaps weighted by TRUE abundance (not the augmented observation counts)
+  out["overlap_norm"]   <- community_overlap_weighted(traits, sp, abund, normal = TRUE)
+  out["overlap_unnorm"] <- community_overlap_weighted(traits, sp, abund, normal = FALSE)
   
   # width of occupied trait space (robust 2.5-97.5% span)
   out["niche_range"] <- diff(quantile(traits, c(0.025, 0.975)))
@@ -189,30 +221,39 @@ for (r in seq_along(focal_units)) {
   f  <- focal_units[r]
   in_focal <- aug$FOCAL == f
   in_pool  <- aug$POOL  == pool_results$POOL[r]
-
+  
   traits_obs  <- aug$log_dist_cm[in_focal];  sp_obs  <- aug$scientificName_Species[in_focal]
   traits_pool <- aug$log_dist_cm[in_pool];   sp_pool <- aug$scientificName_Species[in_pool]
-
-  # observed metrics
-  obs <- community_metrics(traits_obs, sp_obs)
-
-  # null draws
+  
+  # observed metrics (weighted by this focal unit's true abundances)
+  abund_f <- abund_for(f, sp_obs)
+  obs <- community_metrics(traits_obs, sp_obs, abund_f)
+  
+  # null draws. Restrict the observed community to species that have a true
+  # abundance, then PRESERVE two paired vectors and re-label them to the drawn
+  # species: n_ind (individuals sampled -> density shape) and w_obs (true
+  # abundance -> overlap weight). The augmented sample gives the shape; the
+  # NEON div abundance gives the weight.
   null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
                      dimnames = list(NULL, metric_names))
-  abund         <- as.numeric(table(sp_obs))        # observed abundance vector
-  pool_species  <- unique(sp_pool)
+  obs_tab      <- table(sp_obs[sp_obs %in% names(abund_f)])
+  obs_species  <- names(obs_tab)
+  n_ind        <- as.numeric(obs_tab)
+  w_obs        <- as.numeric(abund_f[obs_species])
+  pool_species <- unique(sp_pool)
   for (i in 1:NPERM) {
-    # ---- draw a random assemblage: same richness & N, species + sizes from the pool ----
-    drawn <- sample(pool_species, length(abund))
+    # ---- random assemblage from the pool: same richness, preserved (count, abundance) vectors ----
+    drawn <- sample(pool_species, length(obs_species))
     traits_null <- numeric(0); sp_null <- character(0)
     for (k in seq_along(drawn)) {
       pool_k      <- traits_pool[sp_pool == drawn[k]]
-      traits_null <- c(traits_null, sample(pool_k, abund[k], replace = TRUE))
-      sp_null     <- c(sp_null, rep(drawn[k], abund[k]))
+      traits_null <- c(traits_null, sample(pool_k, n_ind[k], replace = TRUE))
+      sp_null     <- c(sp_null, rep(drawn[k], n_ind[k]))
     }
-    null_mat[i, ] <- community_metrics(traits_null, sp_null)
+    abund_null <- setNames(w_obs, drawn)          # observed true-abundance vector, re-labelled
+    null_mat[i, ] <- community_metrics(traits_null, sp_null, abund_null)
   }
-
+  
   # summarise observed vs null per metric; if a metric is invariant under this
   # null (sd ~ 0, e.g. spacing metrics under swap_means) report CI = obs, ses = NA
   for (m in metric_names) {
@@ -254,12 +295,14 @@ for (r in seq_along(focal_units)) {
   f  <- focal_units[r]
   in_focal <- aug$FOCAL == f
   in_pool  <- aug$POOL  == indiv_results$POOL[r]
-
+  
   traits_obs  <- aug$log_dist_cm[in_focal];  sp_obs  <- aug$scientificName_Species[in_focal]
   traits_pool <- aug$log_dist_cm[in_pool];   sp_pool <- aug$scientificName_Species[in_pool]
-
-  obs <- community_metrics(traits_obs, sp_obs)
-
+  
+  # species (and thus true abundances) are preserved, so use the observed weights
+  abund_f <- abund_for(f, sp_obs)
+  obs <- community_metrics(traits_obs, sp_obs, abund_f)
+  
   null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
                      dimnames = list(NULL, metric_names))
   obs_species <- unique(sp_obs)
@@ -273,9 +316,9 @@ for (r in seq_along(focal_units)) {
       traits_null <- c(traits_null, draw_s)
       sp_null     <- c(sp_null, rep(s, n_s))
     }
-    null_mat[i, ] <- community_metrics(traits_null, sp_null)
+    null_mat[i, ] <- community_metrics(traits_null, sp_null, abund_f)
   }
-
+  
   # summarise observed vs null per metric; if a metric is invariant under this
   # null (sd ~ 0, e.g. spacing metrics under swap_means) report CI = obs, ses = NA
   for (m in metric_names) {
@@ -330,15 +373,17 @@ for (r in seq_along(focal_units)) {
   in_focal <- aug$FOCAL == f
   traits_obs <- aug$log_dist_cm[in_focal];  sp_obs <- aug$scientificName_Species[in_focal]
   
-  obs <- community_metrics(traits_obs, sp_obs)
+  # species (and thus true abundances) are preserved, so use the observed weights
+  abund_f <- abund_for(f, sp_obs)
+  obs <- community_metrics(traits_obs, sp_obs, abund_f)
   
   null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
                      dimnames = list(NULL, metric_names))
   
   # swap operates on exactly the community the metrics use: finite traits, species
-  # with >= 2 individuals. This keeps non-finite / singleton means from leaking a
-  # bad value onto a real species when the means are permuted.
-  keep <- is.finite(traits_obs) & !is.na(sp_obs)
+  # with >= 2 individuals AND a true abundance. This keeps non-finite / singleton /
+  # unweightable means from leaking a bad value onto a real species when permuted.
+  keep <- is.finite(traits_obs) & !is.na(sp_obs) & sp_obs %in% names(abund_f)
   tr   <- traits_obs[keep]; spp <- sp_obs[keep]
   elig <- names(which(table(spp) >= 2))
   tr   <- tr[spp %in% elig]; spp <- spp[spp %in% elig]
@@ -352,7 +397,7 @@ for (r in seq_along(focal_units)) {
       # ---- permute the community means across species; keep identity/abundance/shape ----
       means_swapped <- sample(means)
       traits_null   <- devs + means_swapped[codes]
-      null_mat[i, ] <- community_metrics(traits_null, spp)
+      null_mat[i, ] <- community_metrics(traits_null, spp, abund_f)
     }
   }
   
