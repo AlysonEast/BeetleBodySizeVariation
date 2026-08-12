@@ -8,29 +8,52 @@ library(neonDivData)
 
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
-site_overlap<-read.csv("./Outputs/Site_Ostats_augmented.csv")
-plot_overlap<-read.csv("./Outputs/Plot_Ostats_augmented.csv")
+geodiv_dir<-"/media/aly/Penobscot/NEON/Geodiversity/edi.2320.1/"
+
+#Read in and merge overlap and richness data
+site_overlap<-read.csv("./Outputs/site_by_domain_PoolNull.csv")
+site_overlap$latitude<-NULL
+plot_overlap<-read.csv("./Outputs/plot_by_site_PoolNull.csv")
+plot_overlap$latitude<-NULL
 
 site_richness<-read.csv("../BeetleBiodiversity/Site_annualVarWeightedMean_EstimatedSppRichness.csv")
 site_richness$X<-NULL
 plot_richness<-read.csv("../BeetleBiodiversity/plot_annualVarWeightedMean_EstimatedSppRichness.csv")
 plot_richness$X<-NULL
 
-siteDF<-merge(site_overlap, site_richness, by.x = "site_id", by.y = "Assemblage")
+siteDF<-merge(site_overlap, site_richness, by.x = "siteID", by.y = "Assemblage")
 plotDF<-merge(plot_overlap, plot_richness, by.x = "plotID", by.y = "PlotID")
 
 #Site####
 head(siteDF)
+siteDF$domainID<-NULL
 neonDivData::neon_sites
-siteDF<-merge(neonDivData::neon_sites, siteDF,  by.x = "siteID", by.y = "site_id")
-siteDF$mean_annual_temperature_C<-as.numeric(substr(siteDF$mean_annual_temperature_C, 1, (nchar(siteDF$mean_annual_temperature_C)-2)))
+siteDF<-merge(neonDivData::neon_sites, siteDF,  by = "siteID")
+
+geodiv<-read.csv(paste0(geodiv_dir,"NEON_site_footprint_elev30m.csv"))
+head(geodiv)
+geodiv$domainID<-NULL
+
+siteDF<-merge(siteDF, geodiv, by="siteID")
+head(siteDF)
 
 library(psych)
-pairs.panels(siteDF[,c("Latitude","mean_annual_temperature_C","mean_evelation_m","mean_canopy_height_m","mean_annual_precipitation_mm","log_dist_cm","median_richness")])
-siteDF$overlap<-siteDF$log_dist_cm
-siteDF$logOverlap<-log10(siteDF$log_dist_cm)
-pairs.panels(siteDF[,c("Latitude","mean_annual_temperature_C","mean_evelation_m","mean_canopy_height_m","mean_annual_precipitation_mm","logOverlap","median_richness")])
+pairs.panels(siteDF[,c("Latitude","bio01_mean","srtm_mean","bio12_mean","overlap_unnorm_obs","median_richness")])
 
+#### Plot ####
+#Enviromental Data
+struc<-read.csv("./Outputs/BETplot_Rugosity.csv")
+struc$X<-NULL
+env<-read.csv("./Outputs/BeetlePlotswEnvData.csv")
+NPP<-read.csv("../NEON_MODIS_NPP_2018_2019.csv") #from https://code.earthengine.google.com/b41a55076352b2d9e21ac5e74bf337bc
+
+
+plotDF<-merge(plotDF, struc, by="plotID")
+plotDF<-merge(plotDF, env, by="plotID")
+plotDF<-merge(plotDF, NPP[,c("Npp","Gpp","plotID")], by="plotID")
+head(plotDF)
+
+####Paths####
 #Heterogeneity: Spatial (geodiversity), temporal (growing degree days)
 #Productivity: NPP
 #Climate:
