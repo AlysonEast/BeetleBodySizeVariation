@@ -178,6 +178,25 @@ if (length(missing_keys))
   message("NOTE: ", length(missing_keys), " observed (focal|species) combos have no true abundance ",
           "and drop from the weighted metrics. e.g. ", paste(missing_keys, collapse = "; "))
 
+#### 4c. SPECIES THAT ENTER THE OVERLAP, PER FOCAL UNIT ####
+# Count of species that actually contribute to the overlap at each focal unit:
+# the same eligibility filter community_metrics() uses (finite trait, a true
+# abundance, >= 2 individuals) = the number of density curves community_overlap
+# builds. A property of the OBSERVED community, so it does not depend on the
+# null -- computed once here and merged into each null's output, like `lat`.
+n_sp_tab <- data.frame(FOCAL = focal_units, n_overlap_sp = NA_integer_,
+                       stringsAsFactors = FALSE)
+for (r in seq_along(focal_units)) {
+  f        <- focal_units[r]
+  in_focal <- aug$FOCAL == f
+  sp_f     <- aug$scientificName_Species[in_focal]
+  tr_f     <- aug$log_dist_cm[in_focal]
+  abund_f  <- abund_for(f, sp_f)
+  
+  ok  <- is.finite(tr_f) & !is.na(sp_f) & sp_f != "" & sp_f %in% names(abund_f)
+  spp <- sp_f[ok]
+  n_sp_tab$n_overlap_sp[r] <- length(names(which(table(spp) >= 2)))
+}
 
 #### HELPER: the five metrics for one community ####
 # The only function in the script. It is called once for the observed community
@@ -285,6 +304,7 @@ for (r in seq_along(focal_units)) {
 
 names(pool_results)[1:2] <- c(FOCAL_COL, POOL_COL)
 pool_results <- merge(pool_results, lat, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)
+pool_results <- merge(pool_results, n_sp_tab, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)   # <- add
 write.csv(pool_results, paste0("./Outputs/", OUT_PREFIX, "_PoolNull.csv"), row.names = FALSE)
 message("wrote ", OUT_PREFIX, "_PoolNull.csv  (", nrow(pool_results), " focal units)")
 
@@ -350,6 +370,7 @@ for (r in seq_along(focal_units)) {
 
 names(indiv_results)[1:2] <- c(FOCAL_COL, POOL_COL)
 indiv_results <- merge(indiv_results, lat, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)
+indiv_results <- merge(indiv_results, n_sp_tab, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)   # <- add
 write.csv(indiv_results, paste0("./Outputs/", OUT_PREFIX, "_IndividualNull.csv"), row.names = FALSE)
 message("wrote ", OUT_PREFIX, "_IndividualNull.csv  (", nrow(indiv_results), " focal units)")
 
@@ -432,5 +453,6 @@ message("wrote ", OUT_PREFIX, "_IndividualNull.csv  (", nrow(indiv_results), " f
 # 
 # names(swap_results)[1:2] <- c(FOCAL_COL, POOL_COL)
 # swap_results <- merge(swap_results, lat, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)
+# swap_results <- merge(swap_results, n_sp_tab, by.x = FOCAL_COL, by.y = "FOCAL", all.x = TRUE)   # <- add
 # write.csv(swap_results, paste0("./Outputs/", LEVEL, "_SwapMeansNull.csv"), row.names = FALSE)
 # message("wrote ", LEVEL, "_SwapMeansNull.csv  (", nrow(swap_results), " focal units)")
