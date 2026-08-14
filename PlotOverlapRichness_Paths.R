@@ -29,14 +29,16 @@ setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 Overlap_COL    <- "overlap_norm_obs"   # NOTE: project default elsewhere is overlap_norm_obs
 Complexity_COL <- "log_rugosity_RC"              # heterogeneity proxy; alternatives: srtm_sdq, srtm_sq ... SRTM excludes AK plots... 
 RICH_COL   <- "median_richness"
-TMEAN_COL  <- "bio_11" #Mean daily mean temperature of coldest quarter
-PPT_COL    <- "log_bio_17" #Mean monthly precipitation of the driest quarter
-NPP_COL  <- "log_Npp"                    
+TMEAN_COL  <- "bio_1" #Mean daily mean temperature of coldest quarter
+PPT_COL    <- "log_bio_12" #Mean monthly precipitation of the driest quarter
+NPP_COL  <- "Npp"                    
 
 ## Transforms (applied before standardizing)
 LOG_Overlap        <- TRUE               # overlap spans many orders of magnitude -> log
 RICH_TRANSFORM <- "log"             # "none", "sqrt", or "log"
 STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD units)
+
+EXCLUDE_ISLANDS <- TRUE
 
 ## ============================================================ ##
 ## 1. Assemble plot data: start from plotDF, add NPP
@@ -59,14 +61,66 @@ plotDF<-merge(plotDF, env, by="plotID")
 plotDF<-merge(plotDF, NPP[,c("Npp","Gpp","plotID")], by="plotID")
 head(plotDF)
 
-pairs.panels(plotDF[,c("bio_11","bio_17","rugosity_RC","Npp","overlap_norm_obs","median_richness")])
+plot(plotDF$median_richness~plotDF$n_overlap_sp)
+abline(a=0, b=1)
+plotDF$diff<-plotDF$median_richness-plotDF$n_overlap_sp
+hist(plotDF$diff)
+plotDF$diffpct<-(plotDF$median_richness-plotDF$n_overlap_sp)/plotDF$median_richness
+plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
+table(plotDF$diffpct, useNA = "ifany")
+hist(plotDF$diffpct)
+140/nrow(plotDF)
+plotDF$diffpct
+plotDF$diffsig<-ifelse(plotDF$n_overlap_sp<plotDF$median_lcl | plotDF$n_overlap_sp>plotDF$median_ucl, paste0(1), paste0(0))
+plotDF$diffdouble<-ifelse(plotDF$diffpct>.5, paste0(1), paste0(0))
+
+ggplot(plotDF, aes(x=median_richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
+  geom_point(alpha=0.5) +
+  geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+ggplot(plotDF, aes(x=median_richness, y=n_overlap_sp, colour = diffpct)) +
+  geom_point(alpha=0.5) +
+  geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+(ggplot(plotDF, aes(x= median_richness, y=n_overlap_sp, colour = diffdouble)) +
+    geom_point(alpha=0.5) +
+    geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.3) +
+    geom_abline(intercept = 0, slope = 1) |
+    ggplot(plotDF, aes(x=median_richness, y=n_overlap_sp, colour = diffsig)) +
+    geom_point() +
+    geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.3) +
+    geom_abline(intercept = 0, slope = 1) )
+
+table(plotDF$diffdouble)
+table(plotDF$diffsig)
+
+plotDF<-subset(plotDF, diffdouble==0)
+
+
+
+if (EXCLUDE_ISLANDS) plotDF<-plotDF %>% 
+  filter(!grepl('PUUM', plotDF$plotID),
+         !grepl('LAJA', plotDF$plotID),
+         !grepl('GUAN', plotDF$plotID)) #c("PUUM","LAJA","GUAN"))
+
+
+
+pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","overlap_norm_obs","median_richness")])
 plotDF$log_rugosity_RC<-log10((plotDF$rugosity_RC+0.01))
 plotDF$log_overlap_unnorm_obs<-log10(plotDF$overlap_norm_obs)
 plotDF$log_median_richness<-log10(plotDF$median_richness)
 plotDF$sqrt_median_richness<-sqrt(plotDF$median_richness)
 plotDF$log_Npp<-log10(plotDF$Npp)
-plotDF$log_bio_17<-log10(plotDF$bio_17)
-pairs.panels(plotDF[,c("bio_11","log_bio_17","log_rugosity_RC","log_Npp","log_overlap_unnorm_obs","sqrt_median_richness","log_median_richness")])
+plotDF$log_bio_12<-log10(plotDF$bio_12)
+pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_overlap_unnorm_obs","sqrt_median_richness","log_median_richness")])
+
+
+
+# plotDF$exclude<-
 
 ## ============================================================ ##
 ## 2. Build modeling frame: select, rename, transform, complete-case, scale
@@ -157,27 +211,7 @@ m1_full <- '
 ## over-identified (df > 0), so CFI/RMSEA/chisq are informative again -- a
 ## good-fitting reduced model means the omitted direct paths were not needed.
 
-## richness equation per theory (Overlap retained except in model 8)
-m2_dropGeo <- '  
-  npp  ~ a1*tmean + a2*ppt
-  Overlap  ~ b1*tmean + b2*ppt + b3*npp 
-  rich ~ c1*tmean + c2*ppt + c3*npp + d*Overlap
-
-  # indirect paths to richness
-  ind_tmean_Overlap     := b1*d
-  ind_ppt_Overlap       := b2*d
-  ind_npp_Overlap       := b3*d
-  ind_tmean_npp     := a1*c3
-  ind_ppt_npp       := a2*c3
-  ind_tmean_npp_Overlap := a1*b3*d
-  ind_ppt_npp_Overlap   := a2*b3*d
-
-  # total effects on richness
-  tot_tmean  := c1 + b1*d + a1*c3 + a1*b3*d
-  tot_ppt    := c2 + b2*d + a2*c3 + a2*b3*d
-  tot_npp    := c3 + b3*d
-'
-m3_dropNPP <- '  
+m2_ClimComplexityOverlap <- '  
   Overlap  ~ b1*tmean + b2*ppt + b4*Complexity
   rich ~ c1*tmean + c2*ppt + c4*Complexity + d*Overlap
 
@@ -191,7 +225,7 @@ m3_dropNPP <- '
   tot_ppt    := c2 + b2*d
   tot_Complexity := c4 + b4*d
 '
-m4_climOverlap <- '
+m3_climOverlap <- '
   Overlap  ~ b1*tmean + b2*ppt 
   rich ~ c1*tmean + c2*ppt + d*Overlap
 
@@ -203,7 +237,7 @@ m4_climOverlap <- '
   tot_tmean  := c1 + b1*d
   tot_ppt    := c2 + b2*d
 '
-m5_DropClim <- '
+m4_NPPComplexityOverlap <- '
   Overlap  ~ b3*npp + b4*Complexity
   rich ~ c3*npp + c4*Complexity + d*Overlap
 
@@ -215,7 +249,7 @@ m5_DropClim <- '
   tot_npp    := c3 + b3*d
   tot_Complexity := c4 + b4*d
 '
-m6_NPP <- '
+m5_NPPOverlap <- '
   Overlap  ~ b3*npp
   rich ~ c3*npp + d*Overlap
 
@@ -225,7 +259,7 @@ m6_NPP <- '
   # total effects on richness
   tot_npp    := c3 + b3*d
 '
-m7_Geo <- '
+m6_ComplexityOverlap <- '
   Overlap  ~ b4*Complexity
   rich ~ c4*Complexity + d*Overlap
 
@@ -235,14 +269,33 @@ m7_Geo <- '
   # total effects on richness
   tot_Complexity := c4 + b4*d
 '
+m7_ClimComplex_noOverlap <- '  
+  rich ~ c1*tmean + c2*ppt + c4*Complexity + d*Overlap
+
+  # total effects on richness
+  tot_tmean  := c1 
+  tot_ppt    := c2 
+  tot_Complexity := c4 
+  tot_Overlap := d 
+'
+m8_NPPComplexity_NoOverlap <- '
+  rich ~ c3*npp + c4*Complexity + d*Overlap
+  
+  # total effects on richness
+  tot_npp    := c3 
+  tot_Complexity := c4 
+  tot_Overlap := d 
+'
+
 models <- list(
   "1_Full"              = m1_full,
-  "2_dropGeo"           = m2_dropGeo,
-  "3_dropNPP"           = m3_dropNPP,
-  "4_climOverlap"       = m4_climOverlap,
-  "5_DropClimate"       = m5_DropClim,
-  "6_Npp"               = m6_NPP,
-  "7_Geo"               = m7_Geo
+  "2_ClimComplexityOverlap"           = m2_ClimComplexityOverlap,
+  "3_climOverlap"           = m3_climOverlap,
+  "4_NPPComplexityOverlap"       = m4_NPPComplexityOverlap,
+  "5_NPPOverlap"       = m5_NPPOverlap,
+  "6_ComplexityOverlap"               = m6_ComplexityOverlap,
+  "7_ClimComplex_noOverlap"               = m7_ClimComplex_noOverlap,
+  "8_NPPComplexity_NoOverlap"               = m8_NPPComplexity_NoOverlap
 )
 
 fits <- lapply(models, function(spec) sem(spec, data = dat, estimator = "ML"))
@@ -275,19 +328,25 @@ print(fit_table, row.names = FALSE)
 ## ============================================================ ##
 library(lavaanPlot)
 
-lavaanPlot(model = fits$`3_dropNPP`,
+lavaanPlot(model = fits$`8_NPPComplexity_NoOverlap`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`5_DropClimate`,
+lavaanPlot(model = fits$`7_ClimComplex_noOverlap`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`4_climOverlap`,
+lavaanPlot(model = fits$`4_NPPComplexityOverlap`,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
+lavaanPlot(model = fits$`2_ClimComplexityOverlap`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -296,11 +355,9 @@ lavaanPlot(model = fits$`4_climOverlap`,
 library(tidySEM)
 
 # Create a default graph from the fitted model
-graph_data <- graph_sem(fits$`3_dropNPP`)
-
-# Plot the graph
-plot(graph_data)
-
+graph_sem(fits$`4_NPPComplexityOverlap`)
+graph_sem(fits$`8_NPPComplexity_NoOverlap`)
+graph_sem(fits$`2_ClimComplexityOverlap`)
 
 (ggplot(dat, aes(y=Complexity, x=Overlap)) +
   geom_point(alpha = 0.6) +

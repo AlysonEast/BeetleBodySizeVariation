@@ -97,7 +97,7 @@ if (LOG_ITV) {
 if (RICH_TRANSFORM == "sqrt") dat$rich <- sqrt(dat$rich)
 if (RICH_TRANSFORM == "log")  dat$rich <- log(dat$rich)
 
-if (EXCLUDE_ISLANDS) dat %>% 
+if (EXCLUDE_ISLANDS) dat <- dat %>% 
   filter(!siteID %in% c("PUUM","LAJA","GUAN"))
 
 ## complete-case across ALL model variables so every candidate model is fit on
