@@ -50,7 +50,7 @@ source("./community_overlap_weighted.R")
 
 #### 0. SETTINGS ####
 LEVEL <- "site"     # "plot" or "site"
-POOL  <- "all"     # "site" or "domain" or "all"
+POOL  <- "domain"     # "site" or "domain" or "all"
 
 NPERM   <- 99
 NULLQS  <- c(0.025, 0.975)
