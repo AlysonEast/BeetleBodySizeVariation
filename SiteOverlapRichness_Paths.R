@@ -65,6 +65,49 @@ NPP<-read.csv("../NEONSites_MODIS_NPP_2018_2019.csv") #from https://code.earthen
 siteDF<-merge(siteDF, NPP[,c("Npp","Gpp","siteID")], by="siteID")
 head(siteDF)
 
+plot(siteDF$median_richness~siteDF$n_overlap_sp)
+abline(a=0, b=1)
+siteDF$diff<-siteDF$median_richness-siteDF$n_overlap_sp
+hist(siteDF$diff)
+siteDF$diffpct<-(siteDF$median_richness-siteDF$n_overlap_sp)/siteDF$median_richness
+siteDF$diffpct<-as.numeric(ifelse(siteDF$diffpct<0, paste0(NA), siteDF$diffpct))
+table(siteDF$diffpct, useNA = "ifany")
+hist(siteDF$diffpct)
+15/nrow(siteDF)
+siteDF$diffsig<-ifelse(siteDF$n_overlap_sp<siteDF$median_lcl | siteDF$n_overlap_sp>siteDF$median_ucl, paste0(1), paste0(0))
+siteDF$diffdouble<-ifelse(siteDF$diffpct>.5, paste0(1), paste0(0))
+
+ggplot(siteDF, aes(x=median_richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
+  geom_point(alpha=0.5) +
+  geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+ggplot(siteDF, aes(x=median_richness, y=n_overlap_sp, colour = diffpct)) +
+  geom_point(alpha=0.5) +
+  geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+(ggplot(siteDF, aes(x= median_richness, y=n_overlap_sp, colour = diffdouble)) +
+    geom_point(alpha=0.5) +
+    geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.3) +
+    geom_abline(intercept = 0, slope = 1) |
+    ggplot(siteDF, aes(x=median_richness, y=n_overlap_sp, colour = diffsig)) +
+    geom_point() +
+    geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.3) +
+    geom_abline(intercept = 0, slope = 1) )
+
+table(siteDF$diffdouble)
+table(siteDF$diffsig)
+
+#siteDF<-subset(siteDF, diffdouble==0)
+
+
+if (EXCLUDE_ISLANDS) dat <- dat %>% 
+  filter(!siteID %in% c("PUUM","LAJA","GUAN"))
+
+
 pairs.panels(siteDF[,c("Latitude","bio01_mean","bio12_mean","bio01_sq","Npp","overlap_unnorm_obs","median_richness")])
 siteDF$log_bio12_mean<-log10(siteDF$bio12_mean)
 siteDF$log_bio01_sq<-log10((siteDF$bio01_sq+0.01))
@@ -96,9 +139,6 @@ if (LOG_ITV) {
 }
 if (RICH_TRANSFORM == "sqrt") dat$rich <- sqrt(dat$rich)
 if (RICH_TRANSFORM == "log")  dat$rich <- log(dat$rich)
-
-if (EXCLUDE_ISLANDS) dat <- dat %>% 
-  filter(!siteID %in% c("PUUM","LAJA","GUAN"))
 
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
