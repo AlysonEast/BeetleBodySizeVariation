@@ -24,10 +24,17 @@ setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
 
 #### 0. SETTINGS  (match the by-year run you want to combine) ####
-LEVEL <- "site"                              # "plot" or "site"
-POOL  <- "all"                               # "site" / "domain" / "all"
-YEARS <- c(2018, 2019)
+# Defaults are for interactive runs. When driven by run_ByYear.sh these are
+# overridden by command-line args, in this order:
+#   Rscript Overlap_CustomNulls_ByYear.R <LEVEL> <POOL> <YEAR>
+LEVEL <- "site"     # "plot" or "site"
+POOL  <- "all"      # "site" / "domain" / "all"
 NULLS <- c("PoolNull", "IndividualNull")     # null types the by-year script writes
+YEARS <- c(2018, 2019)
+
+args <- commandArgs(trailingOnly = TRUE)
+if (length(args) >= 1) LEVEL <- args[1]
+if (length(args) >= 2) POOL  <- args[2]
 
 metric_names <- c("overlap_norm", "overlap_unnorm", "niche_range", "sdnnd", "min_logratio")
 FOCAL_COL <- if (LEVEL == "plot") "plotID" else "siteID"
