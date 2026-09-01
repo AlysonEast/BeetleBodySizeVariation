@@ -57,3 +57,20 @@ for (yr in YEARS) {
   message("wrote site_abund_", yr, ".csv (", nrow(site_abund), " rows)  and  ",
           "plot_abund_", yr, ".csv (", nrow(plot_abund), " rows)")
 }
+
+for (yr in YEARS) {
+  dfy <- subset(df, yearCollected == yr)
+  
+  site_abund <- dfy %>%
+    group_by(siteID) %>%
+    summarise(abund = sum(value), .groups = "drop")
+  
+  plot_abund <- dfy %>%
+    group_by(plotID) %>%
+    summarise(abund = sum(value), .groups = "drop")
+  
+  write.csv(site_abund, sprintf("./Data/siteTotal_abund_%d.csv", yr), row.names = FALSE)
+  write.csv(plot_abund, sprintf("./Data/plotTotal_abund_%d.csv", yr), row.names = FALSE)
+  message("wrote siteTotal_abund_", yr, ".csv (", nrow(site_abund), " rows)  and  ",
+          "plotTotal_abund_", yr, ".csv (", nrow(plot_abund), " rows)")
+}
