@@ -63,14 +63,14 @@ plots_climate <- cbind(BETpts, climate)
 climate_matrix<-as.data.frame(plots_climate[,c("bio_1","bio_2","bio_4","bio_5","bio_6","bio_12","bio_15","bio_16","bio_17","bio_18")])
 climate_matrix$geometry<-NULL
 
-climate_matrix<-as.data.frame(plots_climate[,c(38:56)])
+climate_matrix<-as.data.frame(plots_climate[,c(44:63)])
 climate_matrix$geometry<-NULL
 
 pairs.panels(climate_matrix)
 
-climate_matrix$bio_12<-log10(climate_matrix$bio_12)
-climate_matrix$bio_16<-log10(climate_matrix$bio_16)
-climate_matrix$bio_17<-log10(climate_matrix$bio_17)
+# climate_matrix$bio_12<-log10(climate_matrix$bio_12)
+# climate_matrix$bio_16<-log10(climate_matrix$bio_16)
+# climate_matrix$bio_17<-log10(climate_matrix$bio_17)
 
 pairs.panels(climate_matrix) 
 
