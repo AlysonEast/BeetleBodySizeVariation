@@ -235,6 +235,34 @@ if (STANDARDIZE) {
   dat[, model_vars] <- scale(dat[, model_vars])
 }
 
+## quadratic temperature term. Built AFTER standardizing, so tmean is already
+## mean-centered: squaring it puts the vertex at the mean temperature, minimizes
+## collinearity with the linear term, and keeps the marginal slopes below exact.
+## Only bio_1 gets this -- precip curvature is handled by its log transform.
+if (STANDARDIZE) {
+  dat$tmean_sq <- dat$tmean^2
+} else {
+  dat$tmean_sq <- (dat$tmean - mean(dat$tmean))^2
+}
+cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
+    "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
+
+## ============================================================ ##
+## 2.5 Quadratic pretest: does temp curvature occur INSIDE the data range?
+## ============================================================ ##
+fit_lin  <- lm(rich ~ tmean, data = dat)
+fit_quad <- lm(rich ~ tmean + tmean_sq, data = dat)
+cat("\n--- quadratic temperature pretest (plain lm) ---\n")
+print(anova(fit_lin, fit_quad))                 # F-test on the added quadratic
+b1q <- coef(fit_quad)[["tmean"]]; b2q <- coef(fit_quad)[["tmean_sq"]]
+vertex <- -b1q / (2 * b2q)
+cat(sprintf("curvature = %.3f (%s); vertex at std tmean = %.2f; range = [%.2f, %.2f]\n",
+            b2q, ifelse(b2q < 0, "concave/hump", "convex/U"),
+            vertex, min(dat$tmean), max(dat$tmean)))
+cat(ifelse(vertex >= min(dat$tmean) & vertex <= max(dat$tmean),
+           ">> turnover is inside the data: quadratic supported.\n",
+           ">> vertex outside the data: you sample one limb only -- a monotone fit\n   is more honest; reconsider the quadratic before adding it to the SEM.\n"))
+
 ## ============================================================ ##
 ## 3. FULL path model: fit + direct / indirect / total effects on richness
 ## ============================================================ ##
@@ -252,9 +280,8 @@ if (STANDARDIZE) {
 m1_full <- '
   npp  ~ a1*tmean + a2*ppt
   itv  ~ b1*tmean + b2*ppt + b3*npp + b4*geodiv
-  rich ~ c1*tmean + c2*ppt + c3*npp + c4*geodiv + d*itv
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*geodiv + d*itv
 
-  # indirect paths to richness
   ind_tmean_itv     := b1*d
   ind_ppt_itv       := b2*d
   ind_npp_itv       := b3*d
@@ -264,12 +291,20 @@ m1_full <- '
   ind_tmean_npp_itv := a1*b3*d
   ind_ppt_npp_itv   := a2*b3*d
 
-  # total effects on richness
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+
+  # LINEAR-component totals; temperature total is level-dependent (see slopes)
   tot_tmean  := c1 + b1*d + a1*c3 + a1*b3*d
   tot_ppt    := c2 + b2*d + a2*c3 + a2*b3*d
   tot_npp    := c3 + b3*d
   tot_geodiv := c4 + b4*d
 '
+
 ## ============================================================ ##
 ## 4. Candidate models = competing theories of the latitudinal gradient
 ## ============================================================ ##
@@ -286,7 +321,7 @@ m1_full <- '
 m2_dropGeo <- '  
   npp  ~ a1*tmean + a2*ppt
   itv  ~ b1*tmean + b2*ppt + b3*npp 
-  rich ~ c1*tmean + c2*ppt + c3*npp + d*itv
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + d*itv
 
   # indirect paths to richness
   ind_tmean_itv     := b1*d
@@ -297,37 +332,58 @@ m2_dropGeo <- '
   ind_tmean_npp_itv := a1*b3*d
   ind_ppt_npp_itv   := a2*b3*d
 
-  # total effects on richness
+  # temperature curvature -- LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+
+  # LINEAR-component totals; temperature total is level-dependent (see slopes)
   tot_tmean  := c1 + b1*d + a1*c3 + a1*b3*d
   tot_ppt    := c2 + b2*d + a2*c3 + a2*b3*d
   tot_npp    := c3 + b3*d
 '
+
 m3_dropNPP <- '  
   itv  ~ b1*tmean + b2*ppt + b4*geodiv
-  rich ~ c1*tmean + c2*ppt + c4*geodiv + d*itv
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*geodiv + d*itv
 
   # indirect paths to richness
   ind_tmean_itv     := b1*d
   ind_ppt_itv       := b2*d
   ind_geodiv_itv    := b4*d
 
-  # total effects on richness
+  # temperature curvature -- LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+
+  # LINEAR-component totals; temperature total is level-dependent (see slopes)
   tot_tmean  := c1 + b1*d 
   tot_ppt    := c2 + b2*d
   tot_geodiv := c4 + b4*d
 '
+
 m4_climITV <- '
   itv  ~ b1*tmean + b2*ppt 
-  rich ~ c1*tmean + c2*ppt + d*itv
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + d*itv
 
   # indirect paths to richness
   ind_tmean_itv     := b1*d
   ind_ppt_itv       := b2*d
 
-  # total effects on richness
+  # temperature curvature -- LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+
+  # LINEAR-component totals; temperature total is level-dependent (see slopes)
   tot_tmean  := c1 + b1*d
   tot_ppt    := c2 + b2*d
 '
+
 m5_DropClim <- '
   itv  ~ b3*npp + b4*geodiv
   rich ~ c3*npp + c4*geodiv + d*itv
@@ -392,21 +448,10 @@ cat("\n--- competing-theory path models (AIC valid across all; 'endog' must matc
 print(fit_table, row.names = FALSE)
 
 ## ============================================================ ##
-## 5. Targeted nested tests (the two questions that matter)
-## ============================================================ ##
-
-## ============================================================ ##
-## 6. (optional) visualize best/full model
+## 6. visualize models
 ## ============================================================ ##
 library(lavaanPlot)
-
-lavaanPlot(model = fits$`7_Geo`,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
-           stars = c("regress"))  # Append significance stars to regressions
-
-lavaanPlot(model = fits$`5_DropClimate`,
+lavaanPlot(model = fits$`1_Full`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -418,18 +463,212 @@ lavaanPlot(model = fits$`3_dropNPP`,
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
+lavaanPlot(model = fits$`5_DropClimate`,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
 lavaanPlot(model = fits$`4_climITV`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
+
+lavaanPlot(model = fits$`6_Npp`,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
 library(tidySEM)
 
 # Create a default graph from the fitted model
 graph_sem(fits$`3_dropNPP`)
-graph_sem(fits$`7_Geo`)
-graph_sem(fits$`4_climITV`)
-graph_sem(fits$`5_DropClimate`)
 
-ggplot(siteDF, aes(x=median_richness, y=overlap_norm_obs)) +
-  geom_point(aes(colour = overlap_norm_dir))
+ggplot(dat, aes(x=rich, y=itv)) +
+  geom_point() +
+  theme_pubr()
+
+ggplot(dat, aes(x=itv, y=geodiv)) +
+  geom_point() +
+  theme_pubr()
+
+ggplot(dat, aes(x=rich, y=geodiv)) +
+  geom_point() +
+  theme_pubr()
+
+## ============================================================ ##
+## 6. visualize TOP model
+## ============================================================ ##
+
+library(lavaan); library(ggplot2); library(ggpubr); library(dplyr)
+
+USE_BOOT <- TRUE
+N_BOOT   <- 2000   # bump to 5000 for the final figure
+
+fit3 <- sem(m3_dropNPP, data = dat, estimator = "ML",
+            se = if (USE_BOOT) "bootstrap" else "standard",
+            bootstrap = N_BOOT, iseed = 42)
+
+## R^2 for the two responses (how much of ITV and richness the model explains)
+cat("\n--- R^2 (endogenous) ---\n"); print(round(lavInspect(fit3, "rsquare"), 3))
+
+## all standardized paths + defined effects, with CIs
+pe <- parameterEstimates(fit3, standardized = TRUE, ci = TRUE)
+
+## structural paths (b* = env->ITV, c*/q1 = ->richness, d = ITV->richness)
+paths <- subset(pe, op == "~",
+                c("lhs","rhs","label","est","ci.lower","ci.upper","pvalue","std.all"))
+cat("\n--- structural paths (std.all = fully standardized) ---\n")
+print(paths, row.names = FALSE, digits = 3)
+
+## effect decomposition on richness (from the := lines in m3)
+eff <- subset(pe, op == ":=",
+              c("label","est","ci.lower","ci.upper","pvalue"))
+cat("\n--- effects on richness: direct via ITV (ind_*), totals (tot_*), curvature ---\n")
+print(eff, row.names = FALSE, digits = 3)
+
+## relative contribution ranking: |standardized total effect| on richness.
+## Temperature is split: linear-route total + curvature (its total is
+## level-dependent, so read curv_tmean and the slopes alongside).
+rank_tbl <- data.frame(
+  driver = c("temperature (linear route)", "temperature (curvature)",
+             "precip", "heterogeneity", "ITV (direct)"),
+  effect = c(eff$est[eff$label=="tot_tmean"],  eff$est[eff$label=="curv_tmean"],
+             eff$est[eff$label=="tot_ppt"],    eff$est[eff$label=="tot_geodiv"],
+             paths$std.all[paths$label=="d"])
+)
+rank_tbl <- rank_tbl[order(-abs(rank_tbl$effect)), ]
+cat("\n--- relative contribution (|standardized effect on richness|) ---\n")
+print(rank_tbl, row.names = FALSE, digits = 3)
+
+library(lavaanPlot)
+lavaanPlot(model = fit3, coefs = TRUE, stand = TRUE, sig = 0.05,
+           stars = c("regress"),
+           graph_options = list(rankdir = "LR"))
+
+## tidySEM alternative with an explicit layout (tmean_sq sits beside tmean)
+library(tidySEM)
+lay <- get_layout(
+  "tmean", "tmean_sq", "ppt", "geodiv",
+  NA,      "itv",      NA,    NA,
+  NA,      "rich",     NA,    NA,
+  rows = 3)
+graph_sem(fit3, layout = lay)
+
+gb  <- function(l) pe$est[pe$label == l]           # grab a labeled coef
+c1<-gb("c1"); q1<-gb("q1"); c2<-gb("c2"); c4<-gb("c4"); d<-gb("d")
+b1<-gb("b1"); b2<-gb("b2"); b4<-gb("b4")
+mu <- function(v) mean(dat_raw[[v]]); sdv <- function(v) sd(dat_raw[[v]])
+
+## (i) temperature -> richness, with the hump
+tz <- seq(min(dat$tmean), max(dat$tmean), length.out = 250)
+grid <- data.frame(
+  tmean = tz * sdv("tmean") + mu("tmean"),
+  total  = ((c1 + d*b1)*tz + q1*tz^2) * sdv("rich") + mu("rich"),
+  direct = (c1*tz + q1*tz^2)          * sdv("rich") + mu("rich"))
+vz  <- -(c1 + d*b1) / (2*q1)                        # total-effect vertex (std)
+vx  <- vz * sdv("tmean") + mu("tmean")
+pts <- data.frame(tmean = dat_raw$tmean, rich = dat_raw$rich)
+
+p_temp <- ggplot() +
+  geom_point(data = pts, aes(tmean, rich), alpha = .55) +
+  geom_line(data = grid, aes(tmean, total),  linewidth = 1.1, colour = "#c1440e") +
+  geom_line(data = grid, aes(tmean, direct), linewidth = .8, linetype = 2, colour = "grey45") +
+  {if (vz >= min(tz) & vz <= max(tz)) geom_vline(xintercept = vx, linetype = 3)} +
+  labs(x = "Mean annual temperature (bio_1)", y = "Estimated richness",
+       title = "Temperature–richness (solid = total, dashed = direct)") +
+  theme_pubr()
+
+## ============================================================ ##
+## 8.3 Model-implied trends: TOTAL vs DIRECT for each env predictor
+##     total  = direct-to-richness + the part routed through ITV (d * b_k)
+##     direct = the coefficient(s) straight into the richness equation
+## In m3 ITV is the only mediator, so total = direct + d*b_k exactly.
+## Each panel holds the other predictors at their means, so both lines
+## pivot on the bivariate mean; the gap between them IS the mediated share.
+## ============================================================ ##
+gb  <- function(l) pe$est[pe$label == l]
+c1<-gb("c1"); q1<-gb("q1"); c2<-gb("c2"); c4<-gb("c4"); d<-gb("d")
+b1<-gb("b1"); b2<-gb("b2"); b4<-gb("b4")
+mu  <- function(v) mean(dat_raw[[v]]); sdv <- function(v) sd(dat_raw[[v]])
+
+trend_panel <- function(v, direct_slope, total_slope, xlab,
+                        quad = 0, mark_vertex = FALSE) {
+  z  <- seq(min(dat[[v]]), max(dat[[v]]), length.out = 250)
+  bt <- function(slope) (slope*z + quad*z^2) * sdv("rich") + mu("rich")
+  df <- rbind(
+    data.frame(x = z*sdv(v)+mu(v), rich = bt(total_slope),  path = "total"),
+    data.frame(x = z*sdv(v)+mu(v), rich = bt(direct_slope), path = "direct"))
+  p <- ggplot() +
+    geom_point(data = data.frame(x = dat_raw[[v]], rich = dat_raw$rich),
+               aes(x, rich), alpha = .5, colour = "grey40") +
+    geom_line(data = df, aes(x, rich, colour = path, linetype = path),
+              linewidth = 1) +
+    scale_colour_manual(values = c(total = "#c1440e", direct = "grey35")) +
+    scale_linetype_manual(values = c(total = 1, direct = 2)) +
+    labs(x = xlab, y = "Estimated richness", colour = NULL, linetype = NULL) +
+    theme_pubr()
+  if (mark_vertex && quad != 0) {                 # only meaningful for temp
+    vz <- -total_slope / (2*quad)
+    if (vz >= min(z) & vz <= max(z))
+      p <- p + geom_vline(xintercept = vz*sdv(v)+mu(v),
+                          linetype = 3, colour = "grey60")
+  }
+  p
+}
+
+p_temp   <- trend_panel("tmean",  direct_slope = c1,
+                        total_slope = c1 + d*b1,
+                        xlab = "Mean annual temp (bio_1)",
+                        quad = q1, mark_vertex = TRUE)
+p_ppt    <- trend_panel("ppt",    direct_slope = c2,
+                        total_slope = c2 + d*b2,
+                        xlab = "log precip (bio_12)")
+p_geodiv <- trend_panel("geodiv", direct_slope = c4,
+                        total_slope = c4 + d*b4,
+                        xlab = "log thermal heterogeneity")
+
+ggarrange(p_temp, p_ppt, p_geodiv, ncol = 3,
+          common.legend = TRUE, legend = "bottom", labels = "AUTO")
+
+## (ii) ITV -> richness (the focal mechanism, slope d)
+iz <- seq(min(dat$itv), max(dat$itv), length.out = 100)
+p_itv <- ggplot() +
+  geom_point(data = data.frame(itv = dat_raw$itv, rich = dat_raw$rich),
+             aes(itv, rich), alpha = .55) +
+  geom_line(data = data.frame(itv = iz*sdv("itv")+mu("itv"),
+                              rich = (d*iz)*sdv("rich")+mu("rich")),
+            aes(itv, rich), linewidth = 1.1, colour = "#1f6f6f") +
+  labs(x = "ITV (sqrt overlap)", y = "Estimated richness",
+       title = "Trait overlap -> richness") + theme_pubr()
+
+## (iii) environment -> ITV (the mediator's drivers: b1, b2, b4)
+env_panel <- function(v, coef, xlab) {
+  z <- seq(min(dat[[v]]), max(dat[[v]]), length.out = 100)
+  ggplot() +
+    geom_point(data = data.frame(x = dat_raw[[v]], itv = dat_raw$itv),
+               aes(x, itv), alpha = .55) +
+    geom_line(data = data.frame(x = z*sdv(v)+mu(v),
+                                itv = (coef*z)*sdv("itv")+mu("itv")),
+              aes(x, itv), linewidth = 1, colour = "#555599") +
+    labs(x = xlab, y = "ITV (sqrt overlap)") + theme_pubr()
+}
+p_e1 <- env_panel("tmean",  b1, "Temperature (bio_1)")
+p_e2 <- env_panel("ppt",    b2, "log precip (bio_12)")
+p_e3 <- env_panel("geodiv", b4, "log thermal heterogeneity")
+
+ggarrange(p_temp, p_itv, p_e1, p_e2, p_e3, ncol = 2, nrow = 3, labels = "AUTO")
+
+fp <- subset(pe, label %in% c("tot_tmean","curv_tmean","slope_tmean_cold",
+                              "slope_tmean_warm","tot_ppt","tot_geodiv",
+                              "ind_tmean_itv","ind_ppt_itv","ind_geodiv_itv","d"),
+             c("label","est","ci.lower","ci.upper"))
+fp$label <- factor(fp$label, levels = rev(fp$label))
+
+ggplot(fp, aes(est, label)) +
+  geom_vline(xintercept = 0, linetype = 2, colour = "grey60") +
+  geom_pointrange(aes(xmin = ci.lower, xmax = ci.upper)) +
+  labs(x = "Standardized effect on richness (bootstrap CI)", y = NULL,
+       title = "m3_dropNPP: effect decomposition") + theme_pubr()
