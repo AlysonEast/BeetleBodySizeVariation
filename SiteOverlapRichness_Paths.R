@@ -43,8 +43,8 @@ EXCLUDE_ISLANDS <- TRUE
 #Read in and merge overlap and richness data
 # site_overlap<-read.csv("./Outputs/site_by_all_noaug_ByYearAvg_IndividualNull.csv") #use site_by_all becuase there are no exclusions due to domains with 1 site
 #Read in overlap data
-site_2018<-read.csv("./Outputs/site_by_all_noaug_2018_IndividualNull.csv")
-site_2019<-read.csv("./Outputs/site_by_all_noaug_2019_IndividualNull.csv")
+site_2018<-read.csv("./Outputs/site_by_all_aug_2018_IndividualNull.csv")
+site_2019<-read.csv("./Outputs/site_by_all_aug_2019_IndividualNull.csv")
 head(site_2018)
 site_2018$Year<-2018
 site_2019$Year<-2019
@@ -148,6 +148,8 @@ ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, sh
 preExclusion<-siteDF
 siteDF<-subset(siteDF, completeness>=.5)
 siteDF<-subset(siteDF, diffpct<=(2/3))
+siteDF<-subset(siteDF, !is.na(overlap_norm_obs))
+
 
 dim(preExclusion)
 dim(siteDF)
