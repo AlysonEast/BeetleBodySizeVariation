@@ -26,34 +26,145 @@ geodiv_dir<-"/media/aly/Penobscot/NEON/Geodiversity/edi.2320.1/"
 ## 0. CONFIG -- edit these, everything downstream is parameterized
 ## ============================================================ ##
 
-ITV_COL    <- "overlap_norm_obs"   # NOTE: project default elsewhere is overlap_norm_obs
+ITV_COL    <- "sqrt_overlap_unnorm_obs"   
 GEODIV_COL <- "log_bio01_sq"              # heterogeneity proxy; alternatives: srtm_sdq, srtm_sq ... SRTM excludes AK sites... 
-RICH_COL   <- "median_richness"
-TMEAN_COL  <- "bio01_mean"
+RICH_COL   <- "richness"
+TMEAN_COL  <- "bio01_mean"                # This is second order.. 
 PPT_COL    <- "log_bio12_mean"
-NPP_COL  <- "Npp" 
+NPP_COL  <- "log_Npp" 
 
 ## Transforms (applied before standardizing)
-LOG_ITV        <- TRUE               # overlap spans many orders of magnitude -> log
-RICH_TRANSFORM <- "none"             # "none", "sqrt", or "log"
 STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD units)
-
 EXCLUDE_ISLANDS <- TRUE
 
 ## ============================================================ ##
 ## 1. Assemble site data: start from siteDF, add NPP
 ## ============================================================ ##
 #Read in and merge overlap and richness data
-site_overlap<-read.csv("./Outputs/site_by_all_IndividualNull.csv") #use site_by_all because there are no exclusions due to domains with 1 site
+# site_overlap<-read.csv("./Outputs/site_by_all_noaug_ByYearAvg_IndividualNull.csv") #use site_by_all becuase there are no exclusions due to domains with 1 site
+#Read in overlap data
+site_2018<-read.csv("./Outputs/site_by_all_noaug_2018_IndividualNull.csv")
+site_2019<-read.csv("./Outputs/site_by_all_noaug_2019_IndividualNull.csv")
+head(site_2018)
+site_2018$Year<-2018
+site_2019$Year<-2019
+
+site_overlap<-rbind(site_2018, site_2019)
 site_overlap$latitude<-NULL
-site_richness<-read.csv("../BeetleBiodiversity/Site_annualVarWeightedMean_EstimatedSppRichness.csv")
+site_overlap$Assemblage<-paste0(site_overlap$siteID,"_",site_overlap$Year)
+
+site_richness<-read.csv("../BeetleBiodiversity/site_annual_EstimatedSppRichness.csv")
+head(site_richness)
 site_richness$X<-NULL
-siteDF<-merge(site_overlap, site_richness, by.x = "siteID", by.y = "Assemblage")
+site_richness$Assemblage<-paste0(site_richness$Assemblage,"_",site_richness$Year)
+head(site_richness)
+siteDF<-merge(site_overlap, site_richness, by = "Assemblage", all.x = TRUE, all.y = FALSE)
 head(siteDF)
+
+site_abund2018<-read.csv("./Data/siteTotal_abund_2018.csv")
+site_abund2019<-read.csv("./Data/siteTotal_abund_2019.csv")
+head(site_abund2018)
+site_abund2018$Assemblage<-paste0(site_abund2018$siteID,"_2018")
+site_abund2019$Assemblage<-paste0(site_abund2019$siteID,"_2019")
+site_abund<-rbind(site_abund2018, site_abund2019)
+head(site_abund)
+
+siteDF<-merge(siteDF, site_abund, by="Assemblage")
+head(siteDF)
+
+#How stable is overlap from year to year
+siteDF2018<-subset(siteDF, Year.x==2018)
+siteDF2019<-subset(siteDF, Year.x==2019)
+pair<-merge(siteDF2018, siteDF2019, by="siteID.x", all=TRUE)
+head(pair)
+
+plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
+abline(a=0, b=1)
+
+plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
+abline(a=0, b=1)
+plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
+abline(a=0, b=1)
+
+plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
+abline(a=0, b=1)
+
+siteDF$richness<-siteDF$Estimator
+#What overlap values need to be removed?
+plot(siteDF$richness~siteDF$n_overlap_sp)
+abline(a=0, b=1)
+plot(siteDF$Observed~siteDF$n_overlap_sp)
+abline(a=0, b=1)
+
+siteDF$diff<-siteDF$Observed-siteDF$n_overlap_sp
+hist(siteDF$diff)
+
+siteDF$diffpct<-(siteDF$Observed-siteDF$n_overlap_sp)/siteDF$Observed
+siteDF$diffpct<-as.numeric(ifelse(siteDF$diffpct<0, paste0(NA), siteDF$diffpct))
+
+table(siteDF$diffpct, useNA = "ifany")
+hist(siteDF$diffpct)
+siteDF$diffdouble<-ifelse(siteDF$diffpct>.5, paste0(1), paste0(0))
+siteDF$diffthird<-ifelse(siteDF$diffpct>(2/3), paste0(1), paste0(0))
+
+
+ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
+  geom_point(alpha=0.5) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = diffpct, shape = diffdouble)) +
+  geom_point(alpha=0.5, size=3) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+table(siteDF$diffdouble)
+table(siteDF$diffsig)
+
+#Evaluate validity of richness estimates
+ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = completeness, shape = diffdouble)) +
+  geom_point(alpha=0.5, size=3) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+hist(siteDF$completeness)
+
+siteDF$poorRichnessEstimate<-ifelse(siteDF$completeness<.5, paste0(1), paste0(0))
+table(siteDF$poorRichnessEstimate)
+table(siteDF$poorRichnessEstimate, siteDF$diffdouble)
+table(siteDF$poorRichnessEstimate, siteDF$diffthird)
+table(siteDF$poorRichnessEstimate, siteDF$siteID.x)
+
+
+ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, shape = diffthird)) +
+  geom_point(alpha=0.5, size=3) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) 
+
+#### Exclusion ####
+preExclusion<-siteDF
+siteDF<-subset(siteDF, completeness>=.5)
+siteDF<-subset(siteDF, diffpct<=(2/3))
+
+dim(preExclusion)
+dim(siteDF)
+dim(preExclusion)[1]-dim(siteDF)[1]
+
+symdiff(levels(as.factor(preExclusion$siteID.x)),levels(as.factor(siteDF$siteID.x)))
+dim(table(siteDF$siteID.x))
+
+#Env Variaibles
 siteDF$domainID<-NULL
 neonDivData::neon_sites
+siteDF$siteID<-siteDF$siteID.x
+siteDF$siteID.x<-NULL
+siteDF$siteID.y<-NULL
 siteDF<-merge(neonDivData::neon_sites, siteDF,  by = "siteID")
 
+geodiv_dir<-"/media/aly/Penobscot/NEON/Geodiversity/edi.2320.1/"
 geodiv<-read.csv(paste0(geodiv_dir,"NEON_site_footprint_elev30m.csv"))
 head(geodiv)
 geodiv$domainID<-NULL
@@ -65,13 +176,28 @@ NPP<-read.csv("../NEONSites_MODIS_NPP_2018_2019.csv") #from https://code.earthen
 siteDF<-merge(siteDF, NPP[,c("Npp","Gpp","siteID")], by="siteID")
 head(siteDF)
 
-pairs.panels(siteDF[,c("Latitude","bio01_mean","bio12_mean","bio01_sq","Npp","overlap_unnorm_obs","median_richness")])
+#### Pair site#
+if (EXCLUDE_ISLANDS) siteDF <- siteDF %>% 
+  filter(!siteID %in% c("PUUM","LAJA","GUAN"))
+
+pairs.panels(siteDF[,c("bio01_mean","bio12_mean","bio01_sq","Npp","overlap_unnorm_obs","richness")])
 siteDF$log_bio12_mean<-log10(siteDF$bio12_mean)
 siteDF$log_bio01_sq<-log10((siteDF$bio01_sq+0.01))
 siteDF$log_Npp<-log10(siteDF$Npp)
-siteDF$log_median_richness<-log10(siteDF$median_richness)
-pairs.panels(siteDF[,c("Latitude","bio01_mean","log_bio12_mean","log_bio01_sq","log_Npp","overlap_unnorm_obs","log_median_richness")])
 
+siteDF$log_abund<-log10(siteDF$abund)
+siteDF$log_overlap_unnorm_obs<-log10(siteDF$overlap_unnorm_obs)
+siteDF$sqrt_overlap_unnorm_obs<-sqrt(siteDF$overlap_unnorm_obs)
+siteDF$log_Npp<-log10(siteDF$Npp)
+siteDF$log_bio1_mean<-log10((siteDF$bio01_mean+0.001))
+
+pairs.panels(siteDF[,c("bio01_mean","log_bio1_mean","bio12_mean","log_bio12_mean",
+                       "bio01_sq","log_bio01_sq","Npp","log_Npp",
+                       "overlap_unnorm_obs","log_overlap_unnorm_obs","sqrt_overlap_unnorm_obs",
+                       "richness")])
+
+pairs.panels(siteDF[,c("bio01_sq","bio12_sq","srtm_sq",
+                       "richness")])
 
 
 ## ============================================================ ##
@@ -87,18 +213,6 @@ dat <- data.frame(
   itv    = siteDF[[ITV_COL]],
   rich   = siteDF[[RICH_COL]]
 )
-
-## transforms
-if (LOG_ITV) {
-  if (any(dat$itv <= 0, na.rm = TRUE))
-    stop("Non-positive ITV values present; choose log1p or a small constant before logging.")
-  dat$itv <- log(dat$itv)
-}
-if (RICH_TRANSFORM == "sqrt") dat$rich <- sqrt(dat$rich)
-if (RICH_TRANSFORM == "log")  dat$rich <- log(dat$rich)
-
-if (EXCLUDE_ISLANDS) dat <- dat %>% 
-  filter(!siteID %in% c("PUUM","LAJA","GUAN"))
 
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current

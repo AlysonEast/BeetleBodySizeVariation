@@ -49,8 +49,17 @@ source("./community_overlap_weighted.R")
 
 
 #### 0. SETTINGS ####
+# Defaults are for interactive runs. When driven by run_ByYear.sh these are
+# overridden by command-line args, in this order:
+#   Rscript Overlap_CustomNulls_ByYear.R <LEVEL> <POOL> <YEAR>
 LEVEL <- "site"     # "plot" or "site"
-POOL  <- "all"     # "site" or "domain" or "all"
+POOL  <- "all"      # "site" / "domain" / "all"
+YEAR  <- 2018       # 2018 or 2019
+
+args <- commandArgs(trailingOnly = TRUE)
+if (length(args) >= 1) LEVEL <- args[1]
+if (length(args) >= 2) POOL  <- args[2]
+if (length(args) >= 3) YEAR  <- as.numeric(args[3])
 
 NPERM   <- 99
 NULLQS  <- c(0.025, 0.975)
@@ -67,12 +76,12 @@ if (LEVEL == "plot") { FOCAL_COL <- "plotID"; CV_SCALE <- "Plot Level" }
 if (LEVEL == "site") { FOCAL_COL <- "siteID"; CV_SCALE <- "Site Level" }
 POOL_COL   <- if (POOL == "site") "siteID" else 
   if (POOL == "domain") "domainID" else "all"
-OUT_PREFIX <- paste0(LEVEL, "_by_", POOL)     # e.g. "plot_by_site"
-
+OUT_PREFIX <- paste0(LEVEL, "_by_", POOL, "_", YEAR)   # e.g. "site_by_all_2018"
 
 #### 1. READ CLEAN DATA ####
 all_elytra <- read.csv("./Data/BodysizeCombinedClean.csv")
-all_elytra <- subset(all_elytra, yearCollected == 2018 | yearCollected == 2019)
+all_elytra <- subset(all_elytra, yearCollected == YEAR)
+message("Year: ", YEAR, "  |  specimens: ", nrow(all_elytra))
 all_elytra$all<-"all"
 
 # Drop specimens with no species label (NA or blank ""). A blank name is not a
@@ -158,7 +167,8 @@ lat <- aggregate(latitude ~ FOCAL, data = all_elytra, FUN = mean)
 #### 4b. LOAD TRUE (EFFORT-SCALED) ABUNDANCES ####
 # One row per focal-unit x species: columns <FOCAL_COL>, scientificName_Species, abund.
 # Keyed as "focal|species" so a community's weight vector is a single lookup.
-abund_tab <- read.csv(if (LEVEL == "plot") "./Data/plot_abund.csv" else "./Data/site_abund.csv")
+abund_tab <- read.csv(sprintf("./Data/%s_abund_%d.csv",
+                              if (LEVEL == "plot") "plot" else "site", YEAR))
 abund_lookup <- setNames(abund_tab$abund,
                          paste(abund_tab[[FOCAL_COL]], abund_tab$scientificName_Species, sep = "|"))
 
@@ -186,6 +196,8 @@ if (length(missing_keys))
 # null -- computed once here and merged into each null's output, like `lat`.
 n_sp_tab <- data.frame(FOCAL = focal_units, n_overlap_sp = NA_integer_,
                        stringsAsFactors = FALSE)
+message("Computable focal units this year (>= 2 overlap species): ",
+        sum(n_sp_tab$n_overlap_sp >= 2, na.rm = TRUE), " of ", nrow(n_sp_tab))
 for (r in seq_along(focal_units)) {
   f        <- focal_units[r]
   in_focal <- aug$FOCAL == f

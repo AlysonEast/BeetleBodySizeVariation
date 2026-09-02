@@ -25,81 +25,190 @@ setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 ## 0. CONFIG -- edit these, everything downstream is parameterized
 ## ============================================================ ##
 
-#bio_1","bio_12","rugosity_RC","Npp","overlap_unnorm_obs
-Overlap_COL    <- "overlap_norm_obs"   # NOTE: project default elsewhere is overlap_norm_obs
-Complexity_COL <- "log_rugosity_RC"              # heterogeneity proxy; alternatives: srtm_sdq, srtm_sq ... SRTM excludes AK plots... 
+Overlap_COL    <- "sqrt_overlap_unnorm_obs" 
+Complexity_COL <- "rugosity_RC"
 RICH_COL   <- "median_richness"
-TMEAN_COL  <- "bio_1" #Mean daily mean temperature of coldest quarter
+TMEAN_COL  <- "bio_1" # Second Order Mean daily mean temperature of coldest quarter
 PPT_COL    <- "log_bio_12" #Mean monthly precipitation of the driest quarter
-NPP_COL  <- "Npp"                    
+NPP_COL  <- "log_Npp"                    
+Climate <- "Comp.1"
+Abundance <- "log_abound"
+
 
 ## Transforms (applied before standardizing)
 LOG_Overlap        <- TRUE               # overlap spans many orders of magnitude -> log
 RICH_TRANSFORM <- "log"             # "none", "sqrt", or "log"
 STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD units)
-
 EXCLUDE_ISLANDS <- TRUE
 
 ## ============================================================ ##
 ## 1. Assemble plot data: start from plotDF, add NPP
 ## ============================================================ ##
 #Read in and merge overlap and richness data
-plot_overlap<-read.csv("./Outputs/plot_by_all_IndividualNull.csv") #use plot_by_all becuase there are no exclusions due to domains with 1 site
+# plot_overlap<-read.csv("./Outputs/plot_by_all_noaug_ByYearAvg_IndividualNull.csv") #use plot_by_all becuase there are no exclusions due to domains with 1 site
+#Read in overlap data
+plot_2018<-read.csv("./Outputs/plot_by_all_aug_2018_IndividualNull.csv")
+plot_2019<-read.csv("./Outputs/plot_by_all_aug_2019_IndividualNull.csv")
+head(plot_2018)
+plot_2018$Year<-2018
+plot_2019$Year<-2019
+
+plot_overlap<-rbind(plot_2018, plot_2019)
 plot_overlap$latitude<-NULL
-plot_richness<-read.csv("../BeetleBiodiversity/plot_annualVarWeightedMean_EstimatedSppRichness.csv")
+plot_overlap$Assemblage<-paste0(plot_overlap$plotID,"_",plot_overlap$Year)
+
+plot_richness<-read.csv("../BeetleBiodiversity/plot_annual_EstimatedSppRichness.csv")
 plot_richness$X<-NULL
-plotDF<-merge(plot_overlap, plot_richness, by.x = "plotID", by.y = "PlotID")
+head(plot_richness)
+plotDF<-merge(plot_overlap, plot_richness, by = "Assemblage", all.x = TRUE, all.y = FALSE)
 head(plotDF)
 
+plot_abund2018<-read.csv("./Data/plotTotal_abund_2018.csv")
+plot_abund2019<-read.csv("./Data/plotTotal_abund_2019.csv")
+head(plot_abund2018)
+plot_abund2018$Assemblage<-paste0(plot_abund2018$plotID,"_2018")
+plot_abund2019$Assemblage<-paste0(plot_abund2019$plotID,"_2019")
+plot_abund<-rbind(plot_abund2018, plot_abund2019)
+head(plot_abund)
+
+plotDF<-merge(plotDF, plot_abund, by="Assemblage")
+head(plotDF)
+
+#How stable is overlap from year to year
+plotDF2018<-subset(plotDF, Year.x==2018)
+plotDF2019<-subset(plotDF, Year.x==2019)
+pair<-merge(plotDF2018, plotDF2019, by="plotID.x", all=TRUE)
+head(pair)
+
+plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
+abline(a=0, b=1)
+
+plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
+abline(a=0, b=1)
+plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
+abline(a=0, b=1)
+
+plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
+abline(a=0, b=1)
+
+plotDF$richness<-plotDF$Estimator
+#What overlap values need to be removed?
+plot(plotDF$richness~plotDF$n_overlap_sp)
+abline(a=0, b=1)
+plot(plotDF$Observed~plotDF$n_overlap_sp)
+abline(a=0, b=1)
+
+plotDF$diff<-plotDF$Observed-plotDF$n_overlap_sp
+hist(plotDF$diff)
+
+plotDF$diffpct<-(plotDF$Observed-plotDF$n_overlap_sp)/plotDF$Observed
+plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
+
+table(plotDF$diffpct, useNA = "ifany")
+hist(plotDF$diffpct)
+plotDF$diffdouble<-ifelse(plotDF$diffpct>.5, paste0(1), paste0(0))
+plotDF$diffthird<-ifelse(plotDF$diffpct>(2/3), paste0(1), paste0(0))
+
+
+ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
+  geom_point(alpha=0.5) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = diffpct, shape = diffdouble)) +
+  geom_point(alpha=0.5, size=3) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+table(plotDF$diffdouble)
+
+#Evaluate validity of richness estimates
+ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = completeness, shape = diffdouble)) +
+  geom_point(alpha=0.5, size=3) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_colour_gradient(low = "purple", high = "orange")
+
+hist(plotDF$completeness)
+
+plotDF$poorRichnessEstimate<-ifelse(plotDF$completeness<.5, paste0(1), paste0(0))
+table(plotDF$poorRichnessEstimate)
+table(plotDF$poorRichnessEstimate, plotDF$diffdouble)
+table(plotDF$poorRichnessEstimate, plotDF$diffthird)
+table(plotDF$poorRichnessEstimate, plotDF$plotID.x)
+
+
+ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, shape = diffthird)) +
+  geom_point(alpha=0.5, size=3) +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
+  geom_abline(intercept = 0, slope = 1) 
+
+#### Exclusion ####
+preExclusion<-plotDF
+plotDF<-subset(plotDF, completeness>=.5)
+plotDF<-subset(plotDF, diffpct<.5 & n_overlap_sp<=2 | 
+                 n_overlap_sp>2 & diffpct<=(2/3))
+
+dim(preExclusion)
+dim(plotDF)
+dim(preExclusion)[1]-dim(plotDF)[1]
+plotDF<-subset(plotDF, !is.na(overlap_norm_obs))
+
+symdiff(levels(as.factor(preExclusion$plotID.x)),levels(as.factor(plotDF$plotID.x)))
+length(symdiff(levels(as.factor(preExclusion$plotID.x)),levels(as.factor(plotDF$plotID.x))))
+dim(table(plotDF$plotID.x))
+
+symdiff(levels(as.factor(preExclusion$SiteID)),levels(as.factor(plotDF$SiteID)))
+
+plotDF2018<-subset(plotDF, Year.x==2018)
+plotDF2019<-subset(plotDF, Year.x==2019)
+pair<-merge(plotDF2018, plotDF2019, by="plotID.x", all=TRUE)
+head(pair)
+
+plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
+abline(a=0, b=1)
+
+plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
+abline(a=0, b=1)
+plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
+abline(a=0, b=1)
+
+plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
+abline(a=0, b=1)
+
+plot(plotDF$richness~plotDF$overlap_norm_obs)
+plot(plotDF$n_overlap_sp~plotDF$overlap_norm_obs)
+
+
+#Env Variaibles
 struc<-read.csv("./Outputs/BETplot_Rugosity.csv")
 struc$X<-NULL
 env<-read.csv("./Outputs/BeetlePlotswEnvData.csv")
 NPP<-read.csv("../NEON_MODIS_NPP_2018_2019.csv") #from https://code.earthengine.google.com/b41a55076352b2d9e21ac5e74bf337bc
+plotDF$plotID<-plotDF$plotID.x
+plotDF$plotID.x<-NULL
+plotDF$plotID.y<-NULL
 
 plotDF<-merge(plotDF, struc, by="plotID")
 plotDF<-merge(plotDF, env, by="plotID")
 plotDF<-merge(plotDF, NPP[,c("Npp","Gpp","plotID")], by="plotID")
 head(plotDF)
 
-plot(plotDF$median_richness~plotDF$n_overlap_sp)
-abline(a=0, b=1)
-plotDF$diff<-plotDF$median_richness-plotDF$n_overlap_sp
-hist(plotDF$diff)
-plotDF$diffpct<-(plotDF$median_richness-plotDF$n_overlap_sp)/plotDF$median_richness
-plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
-table(plotDF$diffpct, useNA = "ifany")
-hist(plotDF$diffpct)
-140/nrow(plotDF)
-plotDF$diffpct
-plotDF$diffsig<-ifelse(plotDF$n_overlap_sp<plotDF$median_lcl | plotDF$n_overlap_sp>plotDF$median_ucl, paste0(1), paste0(0))
-plotDF$diffdouble<-ifelse(plotDF$diffpct>.5, paste0(1), paste0(0))
-
-ggplot(plotDF, aes(x=median_richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
-  geom_point(alpha=0.5) +
-  geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  scale_colour_gradient(low = "purple", high = "orange")
-
-ggplot(plotDF, aes(x=median_richness, y=n_overlap_sp, colour = diffpct)) +
-  geom_point(alpha=0.5) +
-  geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  scale_colour_gradient(low = "purple", high = "orange")
-
-(ggplot(plotDF, aes(x= median_richness, y=n_overlap_sp, colour = diffdouble)) +
-    geom_point(alpha=0.5) +
-    geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.3) +
-    geom_abline(intercept = 0, slope = 1) |
-    ggplot(plotDF, aes(x=median_richness, y=n_overlap_sp, colour = diffsig)) +
-    geom_point() +
-    geom_errorbar(aes(xmin = median_lcl, xmax=median_ucl), alpha=0.3) +
-    geom_abline(intercept = 0, slope = 1) )
-
-table(plotDF$diffdouble)
-table(plotDF$diffsig)
-
-plotDF<-subset(plotDF, diffdouble==0)
-
+#### Pair plot#
+pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","abund","overlap_unnorm_obs","richness")])
+plotDF$log_rugosity_RC<-log10((plotDF$rugosity_RC+0.01))
+plotDF$log_abund<-log10(plotDF$abund)
+plotDF$log_overlap_unnorm_obs<-log10(plotDF$overlap_unnorm_obs)
+plotDF$sqrt_overlap_unnorm_obs<-sqrt(plotDF$overlap_unnorm_obs)
+plotDF$log_richness<-log10(plotDF$richness)
+plotDF$sqrt_richness<-sqrt(plotDF$richness)
+plotDF$log_Npp<-log10(plotDF$Npp)
+plotDF$log_bio_12<-log10(plotDF$bio_12)
+plotDF$log_bio_1<-log10(plotDF$bio_1)
+plotDF$log_comp.1<-log10(plotDF$Comp.1)
+pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_abund","log_overlap_unnorm_obs","sqrt_richness","log_richness")])
 
 
 if (EXCLUDE_ISLANDS) plotDF<-plotDF %>% 
@@ -108,19 +217,14 @@ if (EXCLUDE_ISLANDS) plotDF<-plotDF %>%
          !grepl('GUAN', plotDF$plotID)) #c("PUUM","LAJA","GUAN"))
 
 
+pairs.panels(plotDF[,c("Comp.1", "log_comp.1","bio_1","log_bio_1","bio_12","log_bio_12","rugosity_RC","log_rugosity_RC",
+                       "Npp","log_Npp","log_abund","abund",
+                       "overlap_unnorm_obs","log_overlap_unnorm_obs","sqrt_overlap_unnorm_obs",
+                       "richness","sqrt_richness","log_richness")])
 
-pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","overlap_norm_obs","median_richness")])
-plotDF$log_rugosity_RC<-log10((plotDF$rugosity_RC+0.01))
-plotDF$log_overlap_unnorm_obs<-log10(plotDF$overlap_norm_obs)
-plotDF$log_median_richness<-log10(plotDF$median_richness)
-plotDF$sqrt_median_richness<-sqrt(plotDF$median_richness)
-plotDF$log_Npp<-log10(plotDF$Npp)
-plotDF$log_bio_12<-log10(plotDF$bio_12)
-pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_overlap_unnorm_obs","sqrt_median_richness","log_median_richness")])
+pairs.panels(plotDF[,c("Comp.1", "Comp.2","Comp.3","Comp.4","Comp.5",
+                       "richness","sqrt_richness","log_richness")])
 
-
-
-# plotDF$exclude<-
 
 ## ============================================================ ##
 ## 2. Build modeling frame: select, rename, transform, complete-case, scale
@@ -135,15 +239,6 @@ dat <- data.frame(
   Overlap    = plotDF[[Overlap_COL]],
   rich   = plotDF[[RICH_COL]]
 )
-
-## transforms
-if (LOG_Overlap) {
-  if (any(dat$Overlap <= 0, na.rm = TRUE))
-    stop("Non-positive Overlap values present; choose log1p or a small constant before logging.")
-  dat$Overlap <- log10(dat$Overlap)
-}
-if (RICH_TRANSFORM == "sqrt") dat$rich <- sqrt(dat$rich)
-if (RICH_TRANSFORM == "log")  dat$rich <- log(dat$rich)
 
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
