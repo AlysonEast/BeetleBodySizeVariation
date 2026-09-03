@@ -52,14 +52,17 @@ source("./community_overlap_weighted.R")
 # Defaults are for interactive runs. When driven by run_ByYear.sh these are
 # overridden by command-line args, in this order:
 #   Rscript Overlap_CustomNulls_ByYear.R <LEVEL> <POOL> <YEAR>
-LEVEL <- "site"     # "plot" or "site"
-POOL  <- "all"      # "site" / "domain" / "all"
-YEAR  <- 2018       # 2018 or 2019
+LEVEL   <- "site"     # "plot" or "site"
+POOL    <- "all"      # "site" / "domain" / "all"
+YEAR    <- 2018       # 2018 or 2019
+AUGMENT <- TRUE       # TRUE: pad sparse species x focal cells to n = 20 (lognormal)
+# FALSE: observed individuals only (no simulated rows)
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) >= 1) LEVEL <- args[1]
-if (length(args) >= 2) POOL  <- args[2]
-if (length(args) >= 3) YEAR  <- as.numeric(args[3])
+if (length(args) >= 1) LEVEL   <- args[1]
+if (length(args) >= 2) POOL    <- args[2]
+if (length(args) >= 3) YEAR    <- as.numeric(args[3])
+if (length(args) >= 4) AUGMENT <- as.logical(args[4])
 
 NPERM   <- 99
 NULLQS  <- c(0.025, 0.975)
@@ -76,7 +79,8 @@ if (LEVEL == "plot") { FOCAL_COL <- "plotID"; CV_SCALE <- "Plot Level" }
 if (LEVEL == "site") { FOCAL_COL <- "siteID"; CV_SCALE <- "Site Level" }
 POOL_COL   <- if (POOL == "site") "siteID" else 
   if (POOL == "domain") "domainID" else "all"
-OUT_PREFIX <- paste0(LEVEL, "_by_", POOL, "_", YEAR)   # e.g. "site_by_all_2018"
+AUG_TAG    <- if (AUGMENT) "aug" else "noaug"
+OUT_PREFIX <- paste0(LEVEL, "_by_", POOL, "_", AUG_TAG, "_", YEAR)   # e.g. "site_by_all_aug_2018"
 
 #### 1. READ CLEAN DATA ####
 all_elytra <- read.csv("./Data/BodysizeCombinedClean.csv")
@@ -106,32 +110,39 @@ message("Level: ", LEVEL, "  |  Pool: ", POOL, "  |  CV scale: ", CV_SCALE,
         " (", round(typical_cvpct, 4), ")")
 
 
-#### 2. AUGMENT SPARSE SPECIES x FOCAL CELLS TO n >= 20 ####
-# Same lognormal augmentation as Overlap_Plot.R / Overlap_Site.R, grouped by the
-# focal unit for this level.
-low_n <- all_elytra %>%
-  group_by(scientificName_Species, across(all_of(FOCAL_COL))) %>%
-  summarise(n_obs = n(),
-            mean_dist = mean(cm_elytra_max_length, na.rm = TRUE),
-            .groups = "drop") %>%
-  filter(n_obs < 20)
+#### 2. (OPTIONALLY) AUGMENT SPARSE SPECIES x FOCAL CELLS TO n >= 20 ####
+# Start from observed individuals; if AUGMENT, pad each sparse species x focal
+# cell up to n = 20 with lognormal draws (same augmentation as Overlap_*.R). With
+# AUGMENT = FALSE only species with >= 2 real individuals enter each overlap.
+aug <- all_elytra[, c("scientificName_Species", FOCAL_COL, "cm_elytra_max_length")]
 
-set.seed(42)
-sim_low_n <- low_n %>%
-  rowwise() %>%
-  mutate(n_to_add = 20 - n_obs,
-         sdlog    = sqrt(log(1 + cv2)),
-         meanlog  = log(mean_dist) - (sdlog^2 / 2),
-         sim_vals = list(rlnorm(n = n_to_add, meanlog = meanlog, sdlog = sdlog))) %>%
-  unnest(cols = sim_vals) %>%
-  dplyr::rename(cm_elytra_max_length = sim_vals) %>%
-  select(all_of(c("scientificName_Species", FOCAL_COL)), cm_elytra_max_length) %>%
-  ungroup()
+if (AUGMENT) {
+  low_n <- all_elytra %>%
+    group_by(scientificName_Species, across(all_of(FOCAL_COL))) %>%
+    summarise(n_obs = n(),
+              mean_dist = mean(cm_elytra_max_length, na.rm = TRUE),
+              .groups = "drop") %>%
+    filter(n_obs < 20)
+  
+  set.seed(42)
+  sim_low_n <- low_n %>%
+    rowwise() %>%
+    mutate(n_to_add = 20 - n_obs,
+           sdlog    = sqrt(log(1 + cv2)),
+           meanlog  = log(mean_dist) - (sdlog^2 / 2),
+           sim_vals = list(rlnorm(n = n_to_add, meanlog = meanlog, sdlog = sdlog))) %>%
+    unnest(cols = sim_vals) %>%
+    dplyr::rename(cm_elytra_max_length = sim_vals) %>%
+    select(all_of(c("scientificName_Species", FOCAL_COL)), cm_elytra_max_length) %>%
+    ungroup()
+  
+  aug <- rbind(aug, as.data.frame(sim_low_n))
+  message("Augmentation ON: added ", nrow(sim_low_n), " simulated individuals")
+} else {
+  message("Augmentation OFF: observed individuals only (", nrow(aug), " individuals)")
+}
 
-aug <- rbind(all_elytra[, c("scientificName_Species", FOCAL_COL, "cm_elytra_max_length")],
-             as.data.frame(sim_low_n))
 aug$log_dist_cm <- log10(aug$cm_elytra_max_length)
-
 
 #### 3. ATTACH REGIONAL POOL IDS ####
 # augmented rows carry only the focal id, so re-attach the higher-level ids
@@ -143,7 +154,7 @@ if (LEVEL == "plot") {
 }
 if (POOL == "all") { 
   aug$all<-"all"
-  }
+}
 aug$FOCAL <- aug[[FOCAL_COL]]     # generic working columns used below
 aug$POOL  <- aug[[POOL_COL]]
 
@@ -258,14 +269,14 @@ for (r in seq_along(focal_units)) {
   f  <- focal_units[r]
   in_focal <- aug$FOCAL == f
   in_pool  <- aug$POOL  == pool_results$POOL[r]
-
+  
   traits_obs  <- aug$log_dist_cm[in_focal];  sp_obs  <- aug$scientificName_Species[in_focal]
   traits_pool <- aug$log_dist_cm[in_pool];   sp_pool <- aug$scientificName_Species[in_pool]
-
+  
   # observed metrics (weighted by this focal unit's true abundances)
   abund_f <- abund_for(f, sp_obs)
   obs <- community_metrics(traits_obs, sp_obs, abund_f)
-
+  
   # null draws. Restrict the observed community to species that have a true
   # abundance, then PRESERVE two paired vectors and re-label them to the drawn
   # species: n_ind (individuals sampled -> density shape) and w_obs (true
@@ -290,7 +301,7 @@ for (r in seq_along(focal_units)) {
     abund_null <- setNames(w_obs, drawn)          # observed true-abundance vector, re-labelled
     null_mat[i, ] <- community_metrics(traits_null, sp_null, abund_null)
   }
-
+  
   # summarise observed vs null per metric; if a metric is invariant under this
   # null (sd ~ 0, e.g. spacing metrics under swap_means) report CI = obs, ses = NA
   for (m in metric_names) {
@@ -333,14 +344,14 @@ for (r in seq_along(focal_units)) {
   f  <- focal_units[r]
   in_focal <- aug$FOCAL == f
   in_pool  <- aug$POOL  == indiv_results$POOL[r]
-
+  
   traits_obs  <- aug$log_dist_cm[in_focal];  sp_obs  <- aug$scientificName_Species[in_focal]
   traits_pool <- aug$log_dist_cm[in_pool];   sp_pool <- aug$scientificName_Species[in_pool]
-
+  
   # species (and thus true abundances) are preserved, so use the observed weights
   abund_f <- abund_for(f, sp_obs)
   obs <- community_metrics(traits_obs, sp_obs, abund_f)
-
+  
   null_mat <- matrix(NA, nrow = NPERM, ncol = length(metric_names),
                      dimnames = list(NULL, metric_names))
   obs_species <- unique(sp_obs)
@@ -356,7 +367,7 @@ for (r in seq_along(focal_units)) {
     }
     null_mat[i, ] <- community_metrics(traits_null, sp_null, abund_f)
   }
-
+  
   # summarise observed vs null per metric; if a metric is invariant under this
   # null (sd ~ 0, e.g. spacing metrics under swap_means) report CI = obs, ses = NA
   for (m in metric_names) {
