@@ -27,7 +27,7 @@ setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
 Overlap_COL    <- "sqrt_overlap_unnorm_obs" 
 Complexity_COL <- "rugosity_RC"
-RICH_COL   <- "median_richness"
+RICH_COL   <- "richness"
 TMEAN_COL  <- "bio_1" # Second Order Mean daily mean temperature of coldest quarter
 PPT_COL    <- "log_bio_12" #Mean monthly precipitation of the driest quarter
 NPP_COL  <- "log_Npp"                    
@@ -101,8 +101,8 @@ abline(a=0, b=1)
 plotDF$diff<-plotDF$Observed-plotDF$n_overlap_sp
 hist(plotDF$diff)
 
-plotDF$diffpct<-(plotDF$Observed-plotDF$n_overlap_sp)/plotDF$Observed
-plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
+plotDF$diffpct<-((plotDF$Observed-plotDF$n_overlap_sp)/plotDF$Observed)
+# plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
 
 table(plotDF$diffpct, useNA = "ifany")
 hist(plotDF$diffpct)
@@ -147,14 +147,20 @@ ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, sh
 
 #### Exclusion ####
 preExclusion<-plotDF
+
+if (EXCLUDE_ISLANDS) plotDF<-plotDF %>% 
+  filter(!grepl('PUUM', plotDF$plotID.x),
+         !grepl('LAJA', plotDF$plotID.x),
+         !grepl('GUAN', plotDF$plotID.x)) #c("PUUM","LAJA","GUAN"))
+
 plotDF<-subset(plotDF, completeness>=.5)
 plotDF<-subset(plotDF, diffpct<.5 & n_overlap_sp<=2 | 
                  n_overlap_sp>2 & diffpct<=(2/3))
 
 dim(preExclusion)
+plotDF<-subset(plotDF, !is.na(overlap_norm_obs))
 dim(plotDF)
 dim(preExclusion)[1]-dim(plotDF)[1]
-plotDF<-subset(plotDF, !is.na(overlap_norm_obs))
 
 symdiff(levels(as.factor(preExclusion$plotID.x)),levels(as.factor(plotDF$plotID.x)))
 length(symdiff(levels(as.factor(preExclusion$plotID.x)),levels(as.factor(plotDF$plotID.x))))
@@ -211,12 +217,6 @@ plotDF$log_comp.1<-log10(plotDF$Comp.1)
 pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_abund","log_overlap_unnorm_obs","sqrt_richness","log_richness")])
 
 
-if (EXCLUDE_ISLANDS) plotDF<-plotDF %>% 
-  filter(!grepl('PUUM', plotDF$plotID),
-         !grepl('LAJA', plotDF$plotID),
-         !grepl('GUAN', plotDF$plotID)) #c("PUUM","LAJA","GUAN"))
-
-
 pairs.panels(plotDF[,c("Comp.1", "log_comp.1","bio_1","log_bio_1","bio_12","log_bio_12","rugosity_RC","log_rugosity_RC",
                        "Npp","log_Npp","log_abund","abund",
                        "overlap_unnorm_obs","log_overlap_unnorm_obs","sqrt_overlap_unnorm_obs",
@@ -258,6 +258,17 @@ dat_raw <- dat
 if (STANDARDIZE) {
   dat[, model_vars] <- scale(dat[, model_vars])
 }
+## quadratic temperature term. Built AFTER standardizing, so tmean is already
+## mean-centered: squaring it puts the vertex at the mean temperature, minimizes
+## collinearity with the linear term, and keeps the marginal slopes below exact.
+## Only bio_1 gets this -- precip curvature is handled by its log transform.
+if (STANDARDIZE) {
+  dat$tmean_sq <- dat$tmean^2
+} else {
+  dat$tmean_sq <- (dat$tmean - mean(dat$tmean))^2
+}
+cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
+    "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
 
 ## ============================================================ ##
 ## 3. FULL path model: fit + direct / indirect / total effects on richness
@@ -276,7 +287,7 @@ if (STANDARDIZE) {
 m1_full <- '
   npp  ~ a1*tmean + a2*ppt
   Overlap  ~ b1*tmean + b2*ppt + b3*npp + b4*Complexity
-  rich ~ c1*tmean + c2*ppt + c3*npp + c4*Complexity + d*Overlap
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*Complexity + d*Overlap
 
   # indirect paths to richness
   ind_tmean_Overlap     := b1*d
@@ -287,6 +298,13 @@ m1_full <- '
   ind_ppt_npp       := a2*c3
   ind_tmean_npp_Overlap := a1*b3*d
   ind_ppt_npp_Overlap   := a2*b3*d
+  
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
 
   # total effects on richness
   tot_tmean  := c1 + b1*d + a1*c3 + a1*b3*d
@@ -308,13 +326,20 @@ m1_full <- '
 
 m2_ClimComplexityOverlap <- '  
   Overlap  ~ b1*tmean + b2*ppt + b4*Complexity
-  rich ~ c1*tmean + c2*ppt + c4*Complexity + d*Overlap
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*Complexity + d*Overlap
 
   # indirect paths to richness
   ind_tmean_Overlap     := b1*d
   ind_ppt_Overlap       := b2*d
   ind_Complexity_Overlap    := b4*d
-
+  
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+  
   # total effects on richness
   tot_tmean  := c1 + b1*d 
   tot_ppt    := c2 + b2*d
@@ -322,11 +347,18 @@ m2_ClimComplexityOverlap <- '
 '
 m3_climOverlap <- '
   Overlap  ~ b1*tmean + b2*ppt 
-  rich ~ c1*tmean + c2*ppt + d*Overlap
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + d*Overlap
 
   # indirect paths to richness
   ind_tmean_Overlap     := b1*d
   ind_ppt_Overlap       := b2*d
+  
+  # temperature curvature 
+  curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
 
   # total effects on richness
   tot_tmean  := c1 + b1*d
@@ -365,8 +397,15 @@ m6_ComplexityOverlap <- '
   tot_Complexity := c4 + b4*d
 '
 m7_ClimComplex_noOverlap <- '  
-  rich ~ c1*tmean + c2*ppt + c4*Complexity + d*Overlap
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*Complexity + d*Overlap
 
+  # temperature curvature 
+  curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+  
   # total effects on richness
   tot_tmean  := c1 
   tot_ppt    := c2 
@@ -423,7 +462,7 @@ print(fit_table, row.names = FALSE)
 ## ============================================================ ##
 library(lavaanPlot)
 
-lavaanPlot(model = fits$`8_NPPComplexity_NoOverlap`,
+lavaanPlot(model = fits$`1_Full`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -435,7 +474,7 @@ lavaanPlot(model = fits$`7_ClimComplex_noOverlap`,
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`4_NPPComplexityOverlap`,
+lavaanPlot(model = fits$`2_ClimComplexityOverlap`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -450,9 +489,8 @@ lavaanPlot(model = fits$`2_ClimComplexityOverlap`,
 library(tidySEM)
 
 # Create a default graph from the fitted model
-graph_sem(fits$`4_NPPComplexityOverlap`)
-graph_sem(fits$`8_NPPComplexity_NoOverlap`)
 graph_sem(fits$`2_ClimComplexityOverlap`)
+graph_sem(fits$`7_ClimComplex_noOverlap`)
 
 (ggplot(dat, aes(y=Complexity, x=Overlap)) +
   geom_point(alpha = 0.6) +
@@ -537,60 +575,3 @@ sem_coefs <- standardizedSolution(m5_DropClim_fit) %>%
 
 sem_coefs
 
-library(ggplot2)
-
-p1 <- ggplot(dat, aes(npp, Overlap)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = "NPP",
-    y = "Overlap",
-    title = "NPP → Overlap"
-  ) +
-  theme_classic()
-
-p2 <- ggplot(dat, aes(Complexity, Overlap)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = "Complexityersity",
-    y = "Overlap",
-    title = "Complexityersity → Overlap"
-  ) +
-  theme_classic()
-
-p3 <- ggplot(dat, aes(npp, rich)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = "NPP",
-    y = "Species richness",
-    title = "NPP → Richness"
-  ) +
-  theme_classic()
-
-p4 <- ggplot(dat, aes(Complexity, rich)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = "Complexityersity",
-    y = "Species richness",
-    title = "Complexityersity → Richness"
-  ) +
-  theme_classic()
-
-p5 <- ggplot(dat, aes(Overlap, rich)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = "Overlap",
-    y = "Species richness",
-    title = "Overlap → Richness"
-  ) +
-  theme_classic()
-
-library(patchwork)
-
-(p1 | p2) /
-  (p3 | p4) /
-  p5

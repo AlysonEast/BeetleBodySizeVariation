@@ -99,8 +99,8 @@ abline(a=0, b=1)
 siteDF$diff<-siteDF$Observed-siteDF$n_overlap_sp
 hist(siteDF$diff)
 
-siteDF$diffpct<-(siteDF$Observed-siteDF$n_overlap_sp)/siteDF$Observed
-siteDF$diffpct<-as.numeric(ifelse(siteDF$diffpct<0, paste0(NA), siteDF$diffpct))
+siteDF$diffpct<-((siteDF$Observed-siteDF$n_overlap_sp)/siteDF$Observed)
+# siteDF$diffpct<-as.numeric(ifelse(siteDF$diffpct<0, paste0(NA), siteDF$diffpct))
 
 table(siteDF$diffpct, useNA = "ifany")
 hist(siteDF$diffpct)
@@ -146,10 +146,11 @@ ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, sh
 
 #### Exclusion ####
 preExclusion<-siteDF
+if (EXCLUDE_ISLANDS) siteDF <- siteDF %>% 
+  filter(!siteID.x %in% c("PUUM","LAJA","GUAN"))
 siteDF<-subset(siteDF, completeness>=.5)
 siteDF<-subset(siteDF, diffpct<=(2/3))
 siteDF<-subset(siteDF, !is.na(overlap_norm_obs))
-
 
 dim(preExclusion)
 dim(siteDF)
@@ -179,8 +180,6 @@ siteDF<-merge(siteDF, NPP[,c("Npp","Gpp","siteID")], by="siteID")
 head(siteDF)
 
 #### Pair site#
-if (EXCLUDE_ISLANDS) siteDF <- siteDF %>% 
-  filter(!siteID %in% c("PUUM","LAJA","GUAN"))
 
 pairs.panels(siteDF[,c("bio01_mean","bio12_mean","bio01_sq","Npp","overlap_unnorm_obs","richness")])
 siteDF$log_bio12_mean<-log10(siteDF$bio12_mean)
