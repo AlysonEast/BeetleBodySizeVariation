@@ -241,8 +241,8 @@ community_metrics <- function(traits, sp, abund) {
   if (length(unique(sp)) < 2) return(out)
   
   # overlaps weighted by TRUE abundance (not the augmented observation counts)
-  out["overlap_norm"]   <- community_overlap_weighted(traits, sp, abund, normal = TRUE)
-  out["overlap_unnorm"] <- community_overlap_weighted(traits, sp, abund, normal = FALSE)
+  out["overlap_norm"]   <- community_overlap_weighted(traits, sp, abund, normal = TRUE, output = "mean")
+  out["overlap_unnorm"] <- community_overlap_weighted(traits, sp, abund, normal = FALSE, output = "mean")
   
   # width of occupied trait space (robust 2.5-97.5% span)
   out["niche_range"] <- diff(quantile(traits, c(0.025, 0.975)))
