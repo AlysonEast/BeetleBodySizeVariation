@@ -7,7 +7,7 @@
 ##   Climate      : Tmean (bio01_mean) + Precip (bio12_mean)
 ##   Productivity : NPP   (added below from NEONplotNPP.csv)
 ##   Heterogeneity: Complexity (an srtm_* surface metric)  <-- CONFIRM WHICH COLUMN
-##   Interaction  : Overlap   (trait overlap)              <-- overlap_norm_obs per instruction
+##   Interaction  : Overlap   (trait overlap)              <-- overlap_unnorm_obs per instruction
 ##   Response     : Richness (median_richness)
 ##
 ## Full path model + 7 candidate models for selection (from sketch).
@@ -63,9 +63,9 @@ head(pair)
 plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
 abline(a=0, b=1)
 
-plot(pair$overlap_norm_obs.x~pair$overlap_norm_obs.y)
+plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
 abline(a=0, b=1)
-plot(sqrt(pair$overlap_norm_obs.x)~sqrt(pair$overlap_norm_obs.y))
+plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
 abline(a=0, b=1)
 
 plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
@@ -90,7 +90,7 @@ plotDF$diffdouble<-ifelse(plotDF$diffpct>.5, paste0(1), paste0(0))
 plotDF$diffthird<-ifelse(plotDF$diffpct>(2/3), paste0(1), paste0(0))
 
 
-ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
+ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = overlap_unnorm_obs)) +
   geom_point(alpha=0.5) +
   geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
   geom_abline(intercept = 0, slope = 1) +
@@ -139,7 +139,7 @@ plotDF<-subset(plotDF, diffpct<.5 & n_overlap_sp<=2 |
                  n_overlap_sp>2 & diffpct<=(2/3))
 
 dim(preExclusion)
-plotDF<-subset(plotDF, !is.na(overlap_norm_obs))
+plotDF<-subset(plotDF, !is.na(overlap_unnorm_obs))
 dim(plotDF)
 dim(preExclusion)[1]-dim(plotDF)[1]
 
@@ -148,6 +148,14 @@ length(symdiff(levels(as.factor(preExclusion$plotID.x)),levels(as.factor(plotDF$
 dim(table(plotDF$plotID.x))
 
 symdiff(levels(as.factor(preExclusion$SiteID)),levels(as.factor(plotDF$SiteID)))
+#Evaluate validity of richness estimates
+ggplot(preExclusion, aes(x=richness, y=n_overlap_sp)) +
+  geom_point(alpha=0.5, size=2, col="grey") +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5, col="grey") +
+  geom_point(data = plotDF, alpha=0.5, size=2, col="black") +
+  geom_errorbar(data = plotDF, aes(xmin = LCL, xmax=UCL), alpha=0.5, col="black") +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_pubr()
 
 plotDF2018<-subset(plotDF, Year.x==2018)
 plotDF2019<-subset(plotDF, Year.x==2019)
@@ -157,16 +165,16 @@ head(pair)
 plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
 abline(a=0, b=1)
 
-plot(pair$overlap_norm_obs.x~pair$overlap_norm_obs.y)
+plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
 abline(a=0, b=1)
-plot(sqrt(pair$overlap_norm_obs.x)~sqrt(pair$overlap_norm_obs.y))
+plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
 abline(a=0, b=1)
 
 plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
 abline(a=0, b=1)
 
-plot(plotDF$richness~plotDF$overlap_norm_obs)
-plot(plotDF$n_overlap_sp~plotDF$overlap_norm_obs)
+plot(plotDF$richness~plotDF$overlap_unnorm_obs)
+plot(plotDF$n_overlap_sp~plotDF$overlap_unnorm_obs)
 
 
 #Env Variaibles
@@ -184,11 +192,11 @@ plotDF<-merge(plotDF, NPP[,c("Npp","Gpp","plotID")], by="plotID")
 head(plotDF)
 
 #### Pair plot#
-pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","abund","overlap_norm_obs","richness")])
+pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","abund","overlap_unnorm_obs","richness")])
 plotDF$log_rugosity_RC<-log10((plotDF$rugosity_RC+0.01))
 plotDF$log_abund<-log10(plotDF$abund)
-plotDF$log_overlap_norm_obs<-log10(plotDF$overlap_norm_obs)
-plotDF$sqrt_overlap_norm_obs<-sqrt(plotDF$overlap_norm_obs)
+plotDF$log_overlap_unnorm_obs<-log10(plotDF$overlap_unnorm_obs)
+plotDF$sqrt_overlap_unnorm_obs<-sqrt(plotDF$overlap_unnorm_obs)
 plotDF$log_richness<-log10(plotDF$richness)
 plotDF$sqrt_richness<-sqrt(plotDF$richness)
 plotDF$log_Npp<-log10(plotDF$Npp)
@@ -196,37 +204,46 @@ plotDF$log_bio_12<-log10(plotDF$bio_12)
 plotDF$log_bio_1<-log10(plotDF$bio_1)
 plotDF$log_comp.1<-log10(plotDF$Comp.1)
 plotDF$log_sdnnd_obs<-log10(plotDF$sdnnd_obs)
-pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_abund","log_overlap_norm_obs","sqrt_richness","log_richness")])
+pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_abund","overlap_unnorm_obs","sqrt_richness","log_richness")])
 
 
 
 pairs.panels(plotDF[,c("bio_1","log_bio_1","bio_12","log_bio_12","rugosity_RC","log_rugosity_RC",
                        "Npp","log_Npp","log_abund","abund",
-                       "overlap_norm_obs","log_overlap_norm_obs","sqrt_overlap_norm_obs",
+                       "overlap_unnorm_obs","sqrt_overlap_unnorm_obs",
                        "richness","sqrt_richness","log_richness")])
 
 pairs.panels(plotDF[,c("bio_1","log_bio_1","bio_12","log_bio_12",
                        "rugosity_RC","log_rugosity_RC",
                        "Npp","log_Npp","log_abund",
                        "niche_range_obs",
-                       "sqrt_overlap_norm_obs",
-                       "log_overlap_norm_obs",
+                       "sqrt_overlap_unnorm_obs",
+                       "overlap_unnorm_obs",
                        "sdnnd_obs",
-                       "richness")])
+                       "richness",
+                       "log_richness")])
 
 
 pairs.panels(plotDF[,c("Comp.1", "Comp.2","Comp.3","Comp.4","Comp.5",
                        "richness","sqrt_richness","log_richness")])
 
+pairs.panels(plotDF[,c("bio_1","log_bio_12",
+                       "rugosity_RC",
+                       "log_Npp",
+                       "niche_range_obs",
+                       "sqrt_overlap_unnorm_obs",
+                       "sdnnd_obs",
+                       "richness",
+                       "log_richness")])
 
 ## ============================================================ ##
 ## 1. CONFIG -- edit these, everything downstream is parameterized
 ## ============================================================ ##
 
-Overlap_COL    <- "sqrt_overlap_norm_obs" 
+Overlap_COL    <- "sqrt_overlap_unnorm_obs" 
 Range_COL     <-"niche_range_obs"
 Complexity_COL <- "rugosity_RC"
-RICH_COL   <- "richness"
+RICH_COL   <- "log_richness"
 TMEAN_COL  <- "bio_1" # Second Order Mean daily mean temperature of coldest quarter
 PPT_COL    <- "log_bio_12" #Mean monthly precipitation of the driest quarter
 NPP_COL  <- "log_Npp"       
@@ -282,6 +299,7 @@ if (STANDARDIZE) {
 }
 cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
     "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
+dat$RangeXOverlap <- dat$Range * dat$Overlap
 
 ## ============================================================ ##
 ## 3. FULL path model: fit + direct / indirect / total effects on richness
@@ -358,12 +376,61 @@ m1_full <- '
   tot_npp    := c3 + b3*d1 + r3*d2 + r3*b5*d1
   tot_Complexity := c4 + b4*d1 + r4*d2 + r4*b5*d1
 '
+# 
+# m1_int <- '
+#   # Range no longer predicts Overlap (dropped the b5 path)
+#   Range   ~ r1*tmean + r3*npp + r4*Complexity
+#   Overlap ~ b1*tmean + b2*ppt + b3*npp + b4*Complexity
+#   rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*Complexity +
+#          d1*Overlap + d2*Range + d3*RangeXOverlap
+# 
+#   # two mediators now covary rather than being causally ordered
+#   # (lavaan estimates this by default for two endogenous vars; explicit here)
+#   Range ~~ Overlap
+# 
+#   # the interaction itself -- conditional slopes are the actual test
+#   slope_Overlap_loRange   := d1 + d3*(-1)
+#   slope_Overlap_meanRange := d1
+#   slope_Overlap_hiRange   := d1 + d3*(1)
+#   slope_Range_loOverlap   := d2 + d3*(-1)
+#   slope_Range_meanOverlap := d2
+#   slope_Range_hiOverlap   := d2 + d3*(1)
+# 
+#   # indirect paths (evaluated at the mean of the OTHER mediator)
+#   ind_tmean_Overlap      := b1*d1
+#   ind_ppt_Overlap        := b2*d1
+#   ind_npp_Overlap        := b3*d1
+#   ind_Complexity_Overlap := b4*d1
+#   ind_tmean_Range        := r1*d2
+#   ind_npp_Range          := r3*d2
+#   ind_Complexity_Range   := r4*d2
+# 
+#   # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
+#   curv_tmean       := q1
+#   slope_tmean_cold := c1 + 2*q1*(-1)
+#   slope_tmean_mean := c1
+#   slope_tmean_warm := c1 + 2*q1*(1)
+# 
+#   # total effects on richness (at the mean of the mediators)
+#   tot_tmean      := c1 + b1*d1 + r1*d2
+#   tot_ppt        := c2 + b2*d1
+#   tot_npp        := c3 + b3*d1 + r3*d2
+#   tot_Complexity := c4 + b4*d1 + r4*d2
+# '
+# 
+# lavaanPlot(model = sem(m1_int, data = dat, estimator = "ML"),
+#            coefs = TRUE,          # Display the path coefficients
+#            stand = TRUE,          # Standardize the coefficients
+#            sig = 0.05,            # Only highlight significant paths
+#            stars = c("regress"))  # Append significance stars to regressions
+# graph_sem(sem(m1_int, data = dat, estimator = "ML"))
 
 lavaanPlot(model = sem(m1_full, data = dat, estimator = "ML"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m1_full, data = dat, estimator = "ML"))
 
 ## ============================================================ ##
 ## 4. Candidate models = competing theories of the latitudinal gradient
@@ -409,7 +476,8 @@ lavaanPlot(model = sem(m2, data = dat, estimator = "ML"),
            stand = TRUE,          # Standardize the coefficients
            stars = c("regress"))  # Append significance stars to regressions
 graph_sem(sem(m2, data = dat, estimator = "ML"))
-
+summary(sem(m2, data = dat, estimator = "ML"))
+m<-sem(m2, data = dat, estimator = "ML")
 
 m3 <- ' #Take out climate
   Range  ~ r3*npp + r4*Complexity
@@ -436,18 +504,20 @@ lavaanPlot(model = sem(m3, data = dat, estimator = "ML"),
            stars = c("regress"))  # Append significance stars to regressions
 graph_sem(sem(m3, data = dat, estimator = "ML"))
 
+AIC(sem(m2, data = dat, estimator = "ML"), sem(m3, data = dat, estimator = "ML"))
 
-m4 <- '
-  Range  ~ r1*tmean 
-  Overlap  ~ b1*tmean + b2*ppt + b5*Range
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + d1*Overlap + d2*Range
+m4 <-  ' #Take out range to overlap
+  Range  ~ r1*tmean + r4*Complexity
+  Overlap  ~ b1*tmean + b2*ppt + b4*Complexity
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*Complexity + d1*Overlap + d2*Range
 
   # indirect paths to richness
   ind_tmean_Overlap     := b1*d1
   ind_ppt_Overlap       := b2*d1
+  ind_Complexity_Overlap    := b4*d1
 
   ind_tmean_Range     := r1*d2
-  ind_tmean_Range_Overlap := r1*b5*d1
+  ind_Complexity_Range  := r4*d2
 
   # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
   curv_tmean       := q1
@@ -457,9 +527,11 @@ m4 <- '
   slope_tmean_warm := c1 + 2*q1*(1)
 
   # total effects on richness
-  tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
+  tot_tmean  := c1 + b1*d1 + r1*d2 
   tot_ppt    := c2 + b2*d1
+  tot_Complexity := c4 + b4*d1 + r4*d2
 '
+
 lavaanPlot(model = sem(m4, data = dat, estimator = "ML"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
@@ -467,6 +539,7 @@ lavaanPlot(model = sem(m4, data = dat, estimator = "ML"),
            stars = c("regress"))  # Append significance stars to regressions
 graph_sem(sem(m4, data = dat, estimator = "ML"))
 
+AIC(sem(m4, data = dat, estimator = "ML"), sem(m2, data = dat, estimator = "ML"))
 
 m5 <- ' #Take out NPP & Swap direction
   Overlap  ~ b1*tmean + b2*ppt + b4*Complexity 
@@ -502,7 +575,9 @@ lavaanPlot(model = sem(m5, data = dat, estimator = "ML"),
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m4, data = dat, estimator = "ML"))
+graph_sem(sem(m5, data = dat, estimator = "ML"))
+
+AIC(sem(m5, data = dat, estimator = "ML"), sem(m2, data = dat, estimator = "ML"))
 
 
 models <- list(
@@ -627,7 +702,7 @@ lavaanPlot(model = fits$`7_Geo`,
 
 
 # Standardized coefficients
-std <- standardizedSolution(fits$`5_DropClimate`)
+std <- standardizedSolution(m)
 
 std %>%
   filter(op == "~") %>%
@@ -653,7 +728,7 @@ m5_DropClim_fit <- sem(
   estimator = "ML")
 library(dplyr)
 
-sem_coefs <- standardizedSolution(m5_DropClim_fit) %>%
+sem_coefs <- standardizedSolution(m) %>%
   filter(op == "~") %>%
   select(lhs, rhs, est.std, pvalue, ci.lower, ci.upper)
 

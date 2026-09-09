@@ -7,7 +7,7 @@
 ##   Climate      : Tmean (bio01_mean) + Precip (bio12_mean)
 ##   Productivity : NPP   (added below from NEONSiteNPP.csv)
 ##   Heterogeneity: Geodiv (an srtm_* surface metric)  <-- CONFIRM WHICH COLUMN
-##   Interaction  : ITV   (trait overlap)              <-- overlap_unnorm_obs per instruction
+##   Interaction  : Overlap   (trait overlap)              <-- overlap_unnorm_obs per instruction
 ##   Response     : Richness (median_richness)
 ##
 ## Full path model + 7 candidate models for selection (from sketch).
@@ -22,23 +22,9 @@ library(psych)
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 geodiv_dir<-"/media/aly/Penobscot/NEON/Geodiversity/edi.2320.1/"
 
-## ============================================================ ##
-## 0. CONFIG -- edit these, everything downstream is parameterized
-## ============================================================ ##
-
-ITV_COL    <- "sqrt_overlap_unnorm_obs"   
-GEODIV_COL <- "log_bio01_sq"              # heterogeneity proxy; alternatives: srtm_sdq, srtm_sq ... SRTM excludes AK sites... 
-RICH_COL   <- "richness"
-TMEAN_COL  <- "bio01_mean"                # This is second order.. 
-PPT_COL    <- "log_bio12_mean"
-NPP_COL  <- "log_Npp" 
-
-## Transforms (applied before standardizing)
-STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD units)
-EXCLUDE_ISLANDS <- TRUE
 
 ## ============================================================ ##
-## 1. Assemble site data: start from siteDF, add NPP
+## 0. Assemble site data: start from siteDF, add NPP
 ## ============================================================ ##
 #Read in and merge overlap and richness data
 # site_overlap<-read.csv("./Outputs/site_by_all_noaug_ByYearAvg_IndividualNull.csv") #use site_by_all becuase there are no exclusions due to domains with 1 site
@@ -108,7 +94,7 @@ siteDF$diffdouble<-ifelse(siteDF$diffpct>.5, paste0(1), paste0(0))
 siteDF$diffthird<-ifelse(siteDF$diffpct>(2/3), paste0(1), paste0(0))
 
 
-ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = log(overlap_norm_obs))) +
+ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = overlap_norm_obs)) +
   geom_point(alpha=0.5) +
   geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
   geom_abline(intercept = 0, slope = 1) +
@@ -146,6 +132,8 @@ ggplot(siteDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, sh
 
 #### Exclusion ####
 preExclusion<-siteDF
+
+EXCLUDE_ISLANDS <- TRUE
 if (EXCLUDE_ISLANDS) siteDF <- siteDF %>% 
   filter(!siteID.x %in% c("PUUM","LAJA","GUAN"))
 siteDF<-subset(siteDF, completeness>=.5)
@@ -158,6 +146,14 @@ dim(preExclusion)[1]-dim(siteDF)[1]
 
 symdiff(levels(as.factor(preExclusion$siteID.x)),levels(as.factor(siteDF$siteID.x)))
 dim(table(siteDF$siteID.x))
+
+ggplot(preExclusion, aes(x=richness, y=n_overlap_sp)) +
+  geom_point(alpha=0.5, size=2, col="grey") +
+  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5, col="grey") +
+  geom_point(data = siteDF, alpha=0.5, size=2, col="black") +
+  geom_errorbar(data = siteDF, aes(xmin = LCL, xmax=UCL), alpha=0.5, col="black") +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_pubr()
 
 #Env Variaibles
 siteDF$domainID<-NULL
@@ -195,11 +191,32 @@ siteDF$log_bio1_mean<-log10((siteDF$bio01_mean+0.001))
 pairs.panels(siteDF[,c("bio01_mean","log_bio1_mean","bio12_mean","log_bio12_mean",
                        "bio01_sq","log_bio01_sq","Npp","log_Npp",
                        "overlap_unnorm_obs","log_overlap_unnorm_obs","sqrt_overlap_unnorm_obs",
+                       "niche_range_obs",
                        "richness")])
 
 pairs.panels(siteDF[,c("bio01_sq","bio12_sq","srtm_sq",
                        "richness")])
 
+pairs.panels(siteDF[,c("bio01_mean","log_bio12_mean",
+                       "log_bio01_sq","Npp",
+                       "overlap_unnorm_obs",
+                       "niche_range_obs",
+                       "richness")])
+
+## ============================================================ ##
+## 1. CONFIG -- edit these, everything downstream is parameterized
+## ============================================================ ##
+
+Overlap_COL    <- "overlap_unnorm_obs"   
+RANGE_COL <- "niche_range_obs"
+GEODIV_COL <- "log_bio01_sq"              # heterogeneity proxy; alternatives: srtm_sdq, srtm_sq ... SRTM excludes AK sites... 
+RICH_COL   <- "richness"
+TMEAN_COL  <- "bio01_mean"                # This is second order.. 
+PPT_COL    <- "log_bio12_mean"
+NPP_COL  <- "Npp" 
+
+## Transforms (applied before standardizing)
+STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD units)
 
 ## ============================================================ ##
 ## 2. Build modeling frame: select, rename, transform, complete-case, scale
@@ -211,14 +228,15 @@ dat <- data.frame(
   ppt    = siteDF[[PPT_COL]],
   npp    = siteDF[[NPP_COL]],
   geodiv = siteDF[[GEODIV_COL]],
-  itv    = siteDF[[ITV_COL]],
+  Overlap    = siteDF[[Overlap_COL]],
+  Range    = siteDF[[RANGE_COL]],
   rich   = siteDF[[RICH_COL]]
 )
 
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
 ## Geodiv column all 47 sites should be retained -- verify in the printout.
-model_vars <- c("tmean", "ppt", "npp", "geodiv", "itv", "rich")
+model_vars <- c("tmean", "ppt", "npp", "geodiv", "Overlap", "Range", "rich")
 cc <- complete.cases(dat[, model_vars])
 
 cat("\n--- complete-case summary ---\n")
@@ -253,8 +271,8 @@ fit_lin  <- lm(rich ~ tmean, data = dat)
 fit_quad <- lm(rich ~ tmean + tmean_sq, data = dat)
 cat("\n--- quadratic temperature pretest (plain lm) ---\n")
 print(anova(fit_lin, fit_quad))                 # F-test on the added quadratic
-b1q <- coef(fit_quad)[["tmean"]]; b2q <- coef(fit_quad)[["tmean_sq"]]
-vertex <- -b1q / (2 * b2q)
+r1q <- coef(fit_quad)[["tmean"]]; b2q <- coef(fit_quad)[["tmean_sq"]]
+vertex <- -r1q / (2 * b2q)
 cat(sprintf("curvature = %.3f (%s); vertex at std tmean = %.2f; range = [%.2f, %.2f]\n",
             b2q, ifelse(b2q < 0, "concave/hump", "convex/U"),
             vertex, min(dat$tmean), max(dat$tmean)))
@@ -270,25 +288,25 @@ cat(ifelse(vertex >= min(dat$tmean) & vertex <= max(dat$tmean),
 ##   rich ~ ppt     water-energy: precipitation acts directly
 ##   rich ~ npp     species-energy ("more individuals")
 ##   rich ~ geodiv  habitat heterogeneity
-##   rich ~ itv     niche packing (focal mechanism)
-## Backbone: climate -> NPP (structural); environment -> ITV (trait space).
+##   rich ~ Overlap     niche packing (focal mechanism)
+## Backbone: climate -> NPP (structural); environment -> Overlap (trait space).
 ## The indirect/total blocks split each driver into its direct effect vs the
-## parts routed through productivity (NPP) and through trait space (ITV) --
+## parts routed through productivity (NPP) and through trait space (Overlap) --
 ## i.e. they partition each variable's action across the competing theories.
 
 m1_full <- '
   npp  ~ a1*tmean + a2*ppt
-  itv  ~ b1*tmean + b2*ppt + b3*npp + b4*geodiv
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*geodiv + d*itv
+  Overlap  ~ b1*tmean + b2*ppt + b3*npp + b4*geodiv
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*geodiv + d*Overlap
 
-  ind_tmean_itv     := b1*d
-  ind_ppt_itv       := b2*d
-  ind_npp_itv       := b3*d
-  ind_geodiv_itv    := b4*d
+  ind_tmean_Overlap     := b1*d
+  ind_ppt_Overlap       := b2*d
+  ind_npp_Overlap       := b3*d
+  ind_geodiv_Overlap    := b4*d
   ind_tmean_npp     := a1*c3
   ind_ppt_npp       := a2*c3
-  ind_tmean_npp_itv := a1*b3*d
-  ind_ppt_npp_itv   := a2*b3*d
+  ind_tmean_npp_Overlap := a1*b3*d
+  ind_ppt_npp_Overlap   := a2*b3*d
 
   # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
   curv_tmean       := q1
@@ -304,122 +322,205 @@ m1_full <- '
   tot_geodiv := c4 + b4*d
 '
 
+
+m1_full <- '
+  Range  ~ r1*tmean + r3*npp + r4*geodiv
+  Overlap  ~ b1*tmean + b2*ppt + b3*npp + b4*geodiv + b5*Range
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*geodiv + d1*Overlap + d2*Range
+
+  # indirect paths to richness
+  ind_tmean_Overlap     := b1*d1
+  ind_ppt_Overlap       := b2*d1
+  ind_npp_Overlap       := b3*d1
+  ind_geodiv_Overlap    := b4*d1
+
+  ind_tmean_Range     := r1*d2
+  ind_npp_Range       := r3*d2
+  ind_geodiv_Range  := r4*d2
+  ind_tmean_Range_Overlap := r1*b5*d1
+  ind_npp_Range_Overlap   := r3*b5*d1
+  ind_geodiv_Range_Overlap   := r4*b5*d1
+
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
+  curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
+  slope_tmean_cold := c1 + 2*q1*(-1)
+  slope_tmean_mean := c1
+  slope_tmean_warm := c1 + 2*q1*(1)
+
+  # total effects on richness
+  tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
+  tot_ppt    := c2 + b2*d1
+  tot_npp    := c3 + b3*d1 + r3*d2 + r3*b5*d1
+  tot_geodiv := c4 + b4*d1 + r4*d2 + r4*b5*d1
+'
+
+lavaanPlot(model = sem(m1_full, data = dat, estimator = "ML"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m1_full, data = dat, estimator = "ML"))
+summary(sem(m1_full, data = dat, estimator = "ML"))
+
 ## ============================================================ ##
 ## 4. Candidate models = competing theories of the latitudinal gradient
 ## ============================================================ ##
 ## SHARED BACKBONE (identical in every model, so all candidates share the same
 ## six variables and N -> AIC/BIC valid across the WHOLE set):
 ##   npp ~ tmean + ppt            climate drives productivity (structural)
-##   itv ~ tmean+ppt+npp+geodiv   environment shapes trait space
+##   Overlap ~ tmean+ppt+npp+geodiv   environment shapes trait space
 ## Models differ ONLY in the RICHNESS equation: which direct-to-richness paths
 ## are free vs fixed to zero. Each choice IS a theory. The reduced models are
 ## over-identified (df > 0), so CFI/RMSEA/chisq are informative again -- a
 ## good-fitting reduced model means the omitted direct paths were not needed.
 
-## richness equation per theory (ITV retained except in model 8)
-m2_dropGeo <- '  
-  npp  ~ a1*tmean + a2*ppt
-  itv  ~ b1*tmean + b2*ppt + b3*npp 
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + d*itv
+m2 <- ' #Take out NPP
+  Range  ~ r1*tmean + r4*geodiv
+  Overlap  ~ b1*tmean + b2*ppt + b4*geodiv + b5*Range
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*geodiv + d1*Overlap + d2*Range
 
   # indirect paths to richness
-  ind_tmean_itv     := b1*d
-  ind_ppt_itv       := b2*d
-  ind_npp_itv       := b3*d
-  ind_tmean_npp     := a1*c3
-  ind_ppt_npp       := a2*c3
-  ind_tmean_npp_itv := a1*b3*d
-  ind_ppt_npp_itv   := a2*b3*d
+  ind_tmean_Overlap     := b1*d1
+  ind_ppt_Overlap       := b2*d1
+  ind_geodiv_Overlap    := b4*d1
 
-  # temperature curvature -- LDG test (expect q1 < 0: thermal optimum)
+  ind_tmean_Range     := r1*d2
+  ind_geodiv_Range  := r4*d2
+  ind_tmean_Range_Overlap := r1*b5*d1
+  ind_geodiv_Range_Overlap   := r4*b5*d1
+
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
   curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
   slope_tmean_cold := c1 + 2*q1*(-1)
   slope_tmean_mean := c1
   slope_tmean_warm := c1 + 2*q1*(1)
 
-  # LINEAR-component totals; temperature total is level-dependent (see slopes)
-  tot_tmean  := c1 + b1*d + a1*c3 + a1*b3*d
-  tot_ppt    := c2 + b2*d + a2*c3 + a2*b3*d
-  tot_npp    := c3 + b3*d
+  # total effects on richness
+  tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
+  tot_ppt    := c2 + b2*d1
+  tot_geodiv := c4 + b4*d1 + r4*d2 + r4*b5*d1
 '
+lavaanPlot(model = sem(m2, data = dat, estimator = "ML"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m2, data = dat, estimator = "ML"))
+summary(sem(m2, data = dat, estimator = "ML"))
 
-m3_dropNPP <- '  
-  itv  ~ b1*tmean + b2*ppt + b4*geodiv
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*geodiv + d*itv
+m3 <- ' #Take out climate
+  Range  ~ r3*npp + r4*geodiv
+  Overlap  ~ b3*npp + b4*geodiv + b5*Range
+  rich ~ c3*npp + c4*geodiv + d1*Overlap + d2*Range
 
   # indirect paths to richness
-  ind_tmean_itv     := b1*d
-  ind_ppt_itv       := b2*d
-  ind_geodiv_itv    := b4*d
+  ind_npp_Overlap       := b3*d1
+  ind_geodiv_Overlap    := b4*d1
 
-  # temperature curvature -- LDG test (expect q1 < 0: thermal optimum)
+  ind_npp_Range       := r3*d2
+  ind_npp_geodiv  := r4*d2
+  ind_npp_Range_Overlap   := r3*b5*d1
+  ind_npp_geodiv_Overlap   := r4*b5*d1
+
+  # total effects on richness
+  tot_npp    := c3 + b3*d1 + r3*d2 + r3*b5*d1
+  tot_geodiv := c4 + b4*d1 + r4*d2 + r4*b5*d1
+'
+lavaanPlot(model = sem(m3, data = dat, estimator = "ML"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m3, data = dat, estimator = "ML"))
+summary(sem(m3, data = dat, estimator = "ML"))
+
+AIC(sem(m2, data = dat, estimator = "ML"), sem(m3, data = dat, estimator = "ML"))
+
+m4 <- ' #Take out Overlap out of Clim Model
+  Range  ~ r1*tmean + r4*geodiv
+  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*geodiv + d2*Range
+
+  # indirect paths to richness
+  ind_tmean_Range     := r1*d2
+  ind_geodiv_Range  := r4*d2
+
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
   curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
   slope_tmean_cold := c1 + 2*q1*(-1)
   slope_tmean_mean := c1
   slope_tmean_warm := c1 + 2*q1*(1)
 
-  # LINEAR-component totals; temperature total is level-dependent (see slopes)
-  tot_tmean  := c1 + b1*d 
-  tot_ppt    := c2 + b2*d
-  tot_geodiv := c4 + b4*d
+  # total effects on richness
+  tot_tmean  := c1 + r1*d2 
+  tot_ppt    := c2 
+  tot_geodiv := c4 + r4*d2
 '
+lavaanPlot(model = sem(m4, data = dat, estimator = "ML"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m4, data = dat, estimator = "ML"))
+summary(sem(m4, data = dat, estimator = "ML"))
+AIC(sem(m2, data = dat, estimator = "ML"), sem(m4, data = dat, estimator = "ML"))
 
-m4_climITV <- '
-  itv  ~ b1*tmean + b2*ppt 
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + d*itv
+m5 <- ' #Take overlap out of NPP modle
+  Range  ~ r3*npp + r4*geodiv
+  rich ~ c3*npp + c4*geodiv + d2*Range
 
   # indirect paths to richness
-  ind_tmean_itv     := b1*d
-  ind_ppt_itv       := b2*d
+  ind_npp_Range       := r3*d2
+  ind_npp_geodiv  := r4*d2
 
-  # temperature curvature -- LDG test (expect q1 < 0: thermal optimum)
+  # total effects on richness
+  tot_npp    := c3 + r3*d2
+  tot_geodiv := c4 + r4*d2
+'
+lavaanPlot(model = sem(m5, data = dat, estimator = "ML"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m3, data = dat, estimator = "ML"))
+summary(sem(m3, data = dat, estimator = "ML"))
+AIC(sem(m5, data = dat, estimator = "ML"), sem(m4, data = dat, estimator = "ML"))
+
+m6 <- ' #Take out Overlap and ppt out of Clim Model
+  Range  ~ r1*tmean + r4*geodiv
+  rich ~ c1*tmean + q1*tmean_sq + c4*geodiv + d2*Range
+
+  # indirect paths to richness
+  ind_tmean_Range     := r1*d2
+  ind_geodiv_Range  := r4*d2
+
+  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
   curv_tmean       := q1
+  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
   slope_tmean_cold := c1 + 2*q1*(-1)
   slope_tmean_mean := c1
   slope_tmean_warm := c1 + 2*q1*(1)
 
-  # LINEAR-component totals; temperature total is level-dependent (see slopes)
-  tot_tmean  := c1 + b1*d
-  tot_ppt    := c2 + b2*d
-'
-
-m5_DropClim <- '
-  itv  ~ b3*npp + b4*geodiv
-  rich ~ c3*npp + c4*geodiv + d*itv
-
-  # indirect paths to richness
-  ind_npp_itv       := b3*d
-  ind_geodiv_itv    := b4*d
-  
   # total effects on richness
-  tot_npp    := c3 + b3*d
-  tot_geodiv := c4 + b4*d
+  tot_tmean  := c1 + r1*d2 
+  tot_geodiv := c4 + r4*d2
 '
-m6_NPP <- '
-  itv  ~ b3*npp
-  rich ~ c3*npp + d*itv
+lavaanPlot(model = sem(m6, data = dat, estimator = "ML"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m6, data = dat, estimator = "ML"))
+summary(sem(m6, data = dat, estimator = "ML"))
+AIC(sem(m6, data = dat, estimator = "ML"), sem(m4, data = dat, estimator = "ML"))
 
-  # indirect paths to richness
-  ind_npp_itv       := b3*d
 
-  # total effects on richness
-  tot_npp    := c3 + b3*d
-'
-m7_Geo <- '
-  itv  ~ b4*geodiv
-  rich ~ c4*geodiv + d*itv
-
-  # indirect paths to richness
-  ind_geodiv_itv    := b4*d
-  
-  # total effects on richness
-  tot_geodiv := c4 + b4*d
-'
 models <- list(
   "1_Full"              = m1_full,
   "2_dropGeo"           = m2_dropGeo,
   "3_dropNPP"           = m3_dropNPP,
-  "4_climITV"           = m4_climITV,
+  "4_climOverlap"           = m4_climOverlap,
   "5_DropClimate"       = m5_DropClim,
   "6_Npp"               = m6_NPP,
   "7_Geo"               = m7_Geo
@@ -468,7 +569,7 @@ lavaanPlot(model = fits$`5_DropClimate`,
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`4_climITV`,
+lavaanPlot(model = fits$`4_climOverlap`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -485,11 +586,11 @@ library(tidySEM)
 # Create a default graph from the fitted model
 graph_sem(fits$`3_dropNPP`)
 
-ggplot(dat, aes(x=rich, y=itv)) +
+ggplot(dat, aes(x=rich, y=Overlap)) +
   geom_point() +
   theme_pubr()
 
-ggplot(dat, aes(x=itv, y=geodiv)) +
+ggplot(dat, aes(x=Overlap, y=geodiv)) +
   geom_point() +
   theme_pubr()
 
@@ -506,17 +607,17 @@ library(lavaan); library(ggplot2); library(ggpubr); library(dplyr)
 USE_BOOT <- TRUE
 N_BOOT   <- 2000   # bump to 5000 for the final figure
 
-fit3 <- sem(m3_dropNPP, data = dat, estimator = "ML",
+fit3 <- sem(m6, data = dat, estimator = "ML",
             se = if (USE_BOOT) "bootstrap" else "standard",
             bootstrap = N_BOOT, iseed = 42)
 
-## R^2 for the two responses (how much of ITV and richness the model explains)
+## R^2 for the two responses (how much of Overlap and richness the model explains)
 cat("\n--- R^2 (endogenous) ---\n"); print(round(lavInspect(fit3, "rsquare"), 3))
 
 ## all standardized paths + defined effects, with CIs
 pe <- parameterEstimates(fit3, standardized = TRUE, ci = TRUE)
 
-## structural paths (b* = env->ITV, c*/q1 = ->richness, d = ITV->richness)
+## structural paths (b* = env->Overlap, c*/q1 = ->richness, d = Overlap->richness)
 paths <- subset(pe, op == "~",
                 c("lhs","rhs","label","est","ci.lower","ci.upper","pvalue","std.all"))
 cat("\n--- structural paths (std.all = fully standardized) ---\n")
@@ -525,18 +626,18 @@ print(paths, row.names = FALSE, digits = 3)
 ## effect decomposition on richness (from the := lines in m3)
 eff <- subset(pe, op == ":=",
               c("label","est","ci.lower","ci.upper","pvalue"))
-cat("\n--- effects on richness: direct via ITV (ind_*), totals (tot_*), curvature ---\n")
+cat("\n--- effects on richness: direct via Overlap (ind_*), totals (tot_*), curvature ---\n")
 print(eff, row.names = FALSE, digits = 3)
 
 ## relative contribution ranking: |standardized total effect| on richness.
 ## Temperature is split: linear-route total + curvature (its total is
 ## level-dependent, so read curv_tmean and the slopes alongside).
 rank_tbl <- data.frame(
-  driver = c("temperature (linear route)", "temperature (curvature)",
-             "precip", "heterogeneity", "ITV (direct)"),
-  effect = c(eff$est[eff$label=="tot_tmean"],  eff$est[eff$label=="curv_tmean"],
-             eff$est[eff$label=="tot_ppt"],    eff$est[eff$label=="tot_geodiv"],
-             paths$std.all[paths$label=="d"])
+  driver = c("temperature (linear route)", "temperature (curvature)", 
+             "heterogeneity", "Range (direct)"),
+  effect = c(eff$est[eff$label=="tot_tmean"],  eff$est[eff$label=="curv_tmean"],    
+             eff$est[eff$label=="tot_geodiv"],
+             paths$std.all[paths$label=="d2"])
 )
 rank_tbl <- rank_tbl[order(-abs(rank_tbl$effect)), ]
 cat("\n--- relative contribution (|standardized effect on richness|) ---\n")
@@ -550,24 +651,24 @@ lavaanPlot(model = fit3, coefs = TRUE, stand = TRUE, sig = 0.05,
 ## tidySEM alternative with an explicit layout (tmean_sq sits beside tmean)
 library(tidySEM)
 lay <- get_layout(
-  "tmean", "tmean_sq", "ppt", "geodiv",
-  NA,      "itv",      NA,    NA,
+  "tmean",  NA, NA, "geodiv",
+  "tmean_sq", "Range",      NA,    NA,
   NA,      "rich",     NA,    NA,
   rows = 3)
 graph_sem(fit3, layout = lay)
 
 gb  <- function(l) pe$est[pe$label == l]           # grab a labeled coef
-c1<-gb("c1"); q1<-gb("q1"); c2<-gb("c2"); c4<-gb("c4"); d<-gb("d")
-b1<-gb("b1"); b2<-gb("b2"); b4<-gb("b4")
+c1<-gb("c1"); q1<-gb("q1"); c4<-gb("c4"); d<-gb("d2")
+r1<-gb("r1"); b4<-gb("b4")
 mu <- function(v) mean(dat_raw[[v]]); sdv <- function(v) sd(dat_raw[[v]])
 
 ## (i) temperature -> richness, with the hump
 tz <- seq(min(dat$tmean), max(dat$tmean), length.out = 250)
 grid <- data.frame(
   tmean = tz * sdv("tmean") + mu("tmean"),
-  total  = ((c1 + d*b1)*tz + q1*tz^2) * sdv("rich") + mu("rich"),
+  total  = ((c1 + d*r1)*tz + q1*tz^2) * sdv("rich") + mu("rich"),
   direct = (c1*tz + q1*tz^2)          * sdv("rich") + mu("rich"))
-vz  <- -(c1 + d*b1) / (2*q1)                        # total-effect vertex (std)
+vz  <- -(c1 + d*r1) / (2*q1)                        # total-effect vertex (std)
 vx  <- vz * sdv("tmean") + mu("tmean")
 pts <- data.frame(tmean = dat_raw$tmean, rich = dat_raw$rich)
 
@@ -582,15 +683,15 @@ p_temp <- ggplot() +
 
 ## ============================================================ ##
 ## 8.3 Model-implied trends: TOTAL vs DIRECT for each env predictor
-##     total  = direct-to-richness + the part routed through ITV (d * b_k)
+##     total  = direct-to-richness + the part routed through Overlap (d * b_k)
 ##     direct = the coefficient(s) straight into the richness equation
-## In m3 ITV is the only mediator, so total = direct + d*b_k exactly.
+## In m3 Overlap is the only mediator, so total = direct + d*b_k exactly.
 ## Each panel holds the other predictors at their means, so both lines
 ## pivot on the bivariate mean; the gap between them IS the mediated share.
 ## ============================================================ ##
 gb  <- function(l) pe$est[pe$label == l]
-c1<-gb("c1"); q1<-gb("q1"); c2<-gb("c2"); c4<-gb("c4"); d<-gb("d")
-b1<-gb("b1"); b2<-gb("b2"); b4<-gb("b4")
+c1<-gb("c1"); q1<-gb("q1"); c4<-gb("c4"); d<-gb("d2")
+r1<-gb("r1"); r4<-gb("r4")
 mu  <- function(v) mean(dat_raw[[v]]); sdv <- function(v) sd(dat_raw[[v]])
 
 trend_panel <- function(v, direct_slope, total_slope, xlab,
@@ -619,50 +720,48 @@ trend_panel <- function(v, direct_slope, total_slope, xlab,
 }
 
 p_temp   <- trend_panel("tmean",  direct_slope = c1,
-                        total_slope = c1 + d*b1,
+                        total_slope = c1 + d*r1,
                         xlab = "Mean annual temp (bio_1)",
                         quad = q1, mark_vertex = TRUE)
-p_ppt    <- trend_panel("ppt",    direct_slope = c2,
-                        total_slope = c2 + d*b2,
-                        xlab = "log precip (bio_12)")
 p_geodiv <- trend_panel("geodiv", direct_slope = c4,
-                        total_slope = c4 + d*b4,
+                        total_slope = c4 + d*r4,
                         xlab = "log thermal heterogeneity")
 
-ggarrange(p_temp, p_ppt, p_geodiv, ncol = 3,
+ggarrange(p_temp, p_geodiv, ncol = 2,
           common.legend = TRUE, legend = "bottom", labels = "AUTO")
 
-## (ii) ITV -> richness (the focal mechanism, slope d)
-iz <- seq(min(dat$itv), max(dat$itv), length.out = 100)
-p_itv <- ggplot() +
-  geom_point(data = data.frame(itv = dat_raw$itv, rich = dat_raw$rich),
-             aes(itv, rich), alpha = .55) +
-  geom_line(data = data.frame(itv = iz*sdv("itv")+mu("itv"),
+## (ii) Range -> richness (the focal mechanism, slope d)
+iz <- seq(min(dat$Range), max(dat$Range), length.out = 100)
+p_Range <- ggplot() +
+  geom_point(data = data.frame(Range = dat_raw$Range, rich = dat_raw$rich),
+             aes(Range, rich), alpha = .55) +
+  geom_line(data = data.frame(Range = iz*sdv("Range")+mu("Range"),
                               rich = (d*iz)*sdv("rich")+mu("rich")),
-            aes(itv, rich), linewidth = 1.1, colour = "#1f6f6f") +
-  labs(x = "ITV (sqrt overlap)", y = "Estimated richness",
-       title = "Trait overlap -> richness") + theme_pubr()
+            aes(Range, rich), linewidth = 1.1, colour = "#1f6f6f") +
+  labs(x = "Range", y = "Estimated richness",
+       title = "Trait Range -> richness") + theme_pubr()
 
-## (iii) environment -> ITV (the mediator's drivers: b1, b2, b4)
+## (iii) environment -> Range (the mediator's drivers: r1, b2, b4)
 env_panel <- function(v, coef, xlab) {
   z <- seq(min(dat[[v]]), max(dat[[v]]), length.out = 100)
   ggplot() +
-    geom_point(data = data.frame(x = dat_raw[[v]], itv = dat_raw$itv),
-               aes(x, itv), alpha = .55) +
+    geom_point(data = data.frame(x = dat_raw[[v]], Range = dat_raw$Range),
+               aes(x, Range), alpha = .55) +
     geom_line(data = data.frame(x = z*sdv(v)+mu(v),
-                                itv = (coef*z)*sdv("itv")+mu("itv")),
-              aes(x, itv), linewidth = 1, colour = "#555599") +
-    labs(x = xlab, y = "ITV (sqrt overlap)") + theme_pubr()
+                                Range = (coef*z)*sdv("Range")+mu("Range")),
+              aes(x, Range), linewidth = 1, colour = "#555599") +
+    labs(x = xlab, y = "Range") + theme_pubr()
 }
-p_e1 <- env_panel("tmean",  b1, "Temperature (bio_1)")
-p_e2 <- env_panel("ppt",    b2, "log precip (bio_12)")
-p_e3 <- env_panel("geodiv", b4, "log thermal heterogeneity")
+p_e1 <- env_panel("tmean",  r1, "Temperature (bio_1)")
+p_e3 <- env_panel("geodiv", r4, "log thermal heterogeneity")
 
-ggarrange(p_temp, p_itv, p_e1, p_e2, p_e3, ncol = 2, nrow = 3, labels = "AUTO")
+ggarrange(p_e1, p_temp,  
+          p_e3, p_geodiv,
+          p_Range, ncol = 2, nrow = 3, labels = "AUTO")
 
 fp <- subset(pe, label %in% c("tot_tmean","curv_tmean","slope_tmean_cold",
                               "slope_tmean_warm","tot_ppt","tot_geodiv",
-                              "ind_tmean_itv","ind_ppt_itv","ind_geodiv_itv","d"),
+                              "ind_tmean_Range","ind_ppt_Range","ind_geodiv_Range","d"),
              c("label","est","ci.lower","ci.upper"))
 fp$label <- factor(fp$label, levels = rev(fp$label))
 
