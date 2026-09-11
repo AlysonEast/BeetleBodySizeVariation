@@ -8,7 +8,7 @@ library(moments)
 
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 
-df<-read.csv("./Data/beetle_lengths_cm_reviewed_clean.csv")
+df<-read.csv("./Data/beetle_lengths_cm_clean.csv")
 allInd<-read.csv("./Data/allIndividuals.csv")
 
 head(df)

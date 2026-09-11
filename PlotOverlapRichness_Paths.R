@@ -27,8 +27,8 @@ setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 #Read in and merge overlap and richness data
 # plot_overlap<-read.csv("./Outputs/plot_by_all_noaug_ByYearAvg_IndividualNull.csv") #use plot_by_all becuase there are no exclusions due to domains with 1 site
 #Read in overlap data
-plot_2018<-read.csv("./Outputs/plot_by_all_aug_2018_IndividualNull.csv")
-plot_2019<-read.csv("./Outputs/plot_by_all_aug_2019_IndividualNull.csv")
+plot_2018<-read.csv("./Outputs/plot_by_site_aug_2018_PoolNull.csv")
+plot_2019<-read.csv("./Outputs/plot_by_site_aug_2019_PoolNull.csv")
 head(plot_2018)
 plot_2018$Year<-2018
 plot_2019$Year<-2019
@@ -81,7 +81,7 @@ abline(a=0, b=1)
 plotDF$diff<-plotDF$Observed-plotDF$n_overlap_sp
 hist(plotDF$diff)
 
-plotDF$diffpct<-((plotDF$Observed-plotDF$n_overlap_sp)/plotDF$Observed)
+plotDF$diffpct<-((plotDF$Estimator-plotDF$n_overlap_sp)/plotDF$Estimator)
 # plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
 
 table(plotDF$diffpct, useNA = "ifany")
@@ -157,6 +157,12 @@ ggplot(preExclusion, aes(x=richness, y=n_overlap_sp)) +
   geom_abline(intercept = 0, slope = 1) +
   theme_pubr()
 
+ggplot(preExclusion, aes(x=richness)) +
+  geom_histogram(fill="grey") +
+  geom_histogram(data = plotDF, alpha=0.5, col="black") +
+  theme_pubr()
+
+
 plotDF2018<-subset(plotDF, Year.x==2018)
 plotDF2019<-subset(plotDF, Year.x==2019)
 pair<-merge(plotDF2018, plotDF2019, by="plotID.x", all=TRUE)
@@ -206,7 +212,13 @@ plotDF$log_comp.1<-log10(plotDF$Comp.1)
 plotDF$log_sdnnd_obs<-log10(plotDF$sdnnd_obs)
 pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_abund","overlap_unnorm_obs","sqrt_richness","log_richness")])
 
-
+pairs.panels(plotDF[,c("bio_1",
+                       "bio_12",
+                       "rugosity_RC",
+                       "Npp",
+                       "niche_range_obs",
+                       "overlap_unnorm_obs",
+                       "richness")])
 
 pairs.panels(plotDF[,c("bio_1","log_bio_1","bio_12","log_bio_12","rugosity_RC","log_rugosity_RC",
                        "Npp","log_Npp","log_abund","abund",
@@ -219,22 +231,74 @@ pairs.panels(plotDF[,c("bio_1","log_bio_1","bio_12","log_bio_12",
                        "niche_range_obs",
                        "sqrt_overlap_unnorm_obs",
                        "overlap_unnorm_obs",
+                       "overlap_norm_obs",
                        "sdnnd_obs",
                        "richness",
                        "log_richness")])
 
+plotDF$sqrt_overlap_norm_obs<-sqrt(plotDF$overlap_norm_obs)
+pairs.panels(plotDF[,c("niche_range_obs",
+                       "overlap_unnorm_obs","sqrt_overlap_unnorm_obs",
+                       "overlap_norm_obs","sqrt_overlap_norm_obs",
+                       "sdnnd_obs",
+                       "richness",
+                       "log_richness")])
+
+plot(plotDF$sqrt_overlap_unnorm_obs~plotDF$richness)
+ggplot(plotDF, aes(x=richness, y=overlap_unnorm_obs))+
+  geom_point()
+
+ggplot(plotDF, aes(x=richness, y=sqrt_overlap_unnorm_obs, colour = overlap_norm_ses))+
+  scale_color_gradient2(low = "#2C7FB8", mid = "grey80", high = "#D95F02", midpoint = 0) +
+  geom_point() +
+  theme_pubr()
+
+ggplot(plotDF, aes(x=richness, y=overlap_unnorm_obs, colour = overlap_norm_ses))+
+  scale_color_gradient2(low = "#2C7FB8", mid = "grey80", high = "#D95F02", midpoint = 0) +
+  geom_point() +
+  theme_pubr()
+  
+ggplot(plotDF, aes(x=richness, y=niche_range_obs, colour = niche_range_ses))+
+  scale_color_gradient2(low = "#2C7FB8", mid = "grey80", high = "#D95F02", midpoint = 0) +
+  geom_point() +
+  theme_pubr()
 
 pairs.panels(plotDF[,c("Comp.1", "Comp.2","Comp.3","Comp.4","Comp.5",
                        "richness","sqrt_richness","log_richness")])
 
 pairs.panels(plotDF[,c("bio_1","log_bio_12",
-                       "rugosity_RC",
+                       "log_rugosity_RC",
                        "log_Npp",
                        "niche_range_obs",
+                       "overlap_unnorm_obs",
                        "sqrt_overlap_unnorm_obs",
+                       "log_overlap_unnorm_obs",
                        "sdnnd_obs",
                        "richness",
                        "log_richness")])
+
+ggarrange(
+ggplot(plotDF, aes(y=richness, col=SiteID)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=richness)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=overlap_unnorm_obs, col=SiteID)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=overlap_unnorm_obs)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=niche_range_obs, col=SiteID)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=niche_range_obs)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=bio_1, col=SiteID)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=bio_1)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=log_rugosity_RC, col=SiteID)) +
+  geom_boxplot(),
+ggplot(plotDF, aes(y=log_rugosity_RC)) +
+  geom_boxplot(),
+nrow=5, ncol=2)
 
 ## ============================================================ ##
 ## 1. CONFIG -- edit these, everything downstream is parameterized
@@ -242,8 +306,8 @@ pairs.panels(plotDF[,c("bio_1","log_bio_12",
 
 Overlap_COL    <- "sqrt_overlap_unnorm_obs" 
 Range_COL     <-"niche_range_obs"
-Complexity_COL <- "rugosity_RC"
-RICH_COL   <- "log_richness"
+Complexity_COL <- "log_rugosity_RC"
+RICH_COL   <- "richness"
 TMEAN_COL  <- "bio_1" # Second Order Mean daily mean temperature of coldest quarter
 PPT_COL    <- "log_bio_12" #Mean monthly precipitation of the driest quarter
 NPP_COL  <- "log_Npp"       
@@ -288,6 +352,8 @@ dat_raw <- dat
 if (STANDARDIZE) {
   dat[, model_vars] <- scale(dat[, model_vars])
 }
+head(dat)
+hist(dat$rich)
 ## quadratic temperature term. Built AFTER standardizing, so tmean is already
 ## mean-centered: squaring it puts the vertex at the mean temperature, minimizes
 ## collinearity with the linear term, and keeps the marginal slopes below exact.
@@ -476,8 +542,12 @@ lavaanPlot(model = sem(m2, data = dat, estimator = "ML"),
            stand = TRUE,          # Standardize the coefficients
            stars = c("regress"))  # Append significance stars to regressions
 graph_sem(sem(m2, data = dat, estimator = "ML"))
-summary(sem(m2, data = dat, estimator = "ML"))
+summary(sem(m2, data = dat, estimator = "ML"), fit.measures=TRUE)
 m<-sem(m2, data = dat, estimator = "ML")
+summary(m, fit.measures=TRUE)
+
+
+fitMeasures(m, c("chisq", "df", "pvalue", "rmsea", "cfi", "tli", "srmr"))
 
 m3 <- ' #Take out climate
   Range  ~ r3*npp + r4*Complexity
@@ -701,36 +771,291 @@ lavaanPlot(model = fits$`7_Geo`,
            stars = c("regress"))  # Append significance stars to regressions
 
 
-# Standardized coefficients
-std <- standardizedSolution(m)
+# =====================================================================
+# X. Effect decomposition for top model (m2): direct / indirect / total
+# =====================================================================
+# Parameters ----------------------------------------------------------
+m<-sem(m2, data = dat, estimator = "ML")
 
-std %>%
-  filter(op == "~") %>%
-  select(lhs, rhs, est.std, pvalue, ci.lower, ci.upper)
-dat_plot <- dat %>%
-  mutate(
-    npp_resid = residuals(lm(npp ~ Complexity + Overlap, data = .)),
-    rich_resid = residuals(lm(rich ~ Complexity + Overlap, data = .))
-  )
+FIT      <- m                 # point at your fitted sem() object for m2
+STD      <- TRUE                   # TRUE = standardized (est.std); FALSE = raw
+CI_LEVEL <- 0.95
+FIG_DIR  <- "./Figures/PathEffects"
+dir.create(FIG_DIR, showWarnings = FALSE, recursive = TRUE)
 
-ggplot(dat_plot, aes(npp_resid, rich_resid)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(method = "lm", se = TRUE) +
-  labs(
-    x = "NPP (adjusted for Complexityersity and Overlap)",
-    y = "Richness (adjusted for Complexityersity and Overlap)"
-  ) +
-  theme_classic()
-
-m5_DropClim_fit <- sem(
-  m5_DropClim,
-  data = dat,
-  estimator = "ML")
+library(lavaan)
+library(ggplot2)
+library(ggpubr)
+library(patchwork)
+library(svglite)
 library(dplyr)
+library(forcats)
 
-sem_coefs <- standardizedSolution(m) %>%
-  filter(op == "~") %>%
-  select(lhs, rhs, est.std, pvalue, ci.lower, ci.upper)
+# Predictor colours (replace with the Tableau palette from TPDexample.R) ---
+pred_cols <- c(Temperature   = "#4E79A7",
+               Precipitation = "#59A14F",
+               Complexity    = "#F28E2B",
+               Mediator      = "#BAB0AC")
 
-sem_coefs
+# 1. Pull the parameter table (standardized or unstandardized) --------
+pe <- if (STD) {
+  standardizedSolution(FIT, level = CI_LEVEL) |> rename(est = est.std)
+} else {
+  parameterEstimates(FIT, level = CI_LEVEL, standardized = FALSE)
+}
+# columns used downstream: lhs, op, rhs, est, ci.lower, ci.upper
 
+# 2. Direct effects on richness (all rich ~ paths) --------------------
+direct_df <- pe %>%
+  filter(op == "~", lhs == "rich") %>%
+  mutate(
+    label = recode(rhs,
+                   tmean      = "Temperature",
+                   tmean_sq   = "Temperature\u00B2 (curv.)",
+                   ppt        = "Precipitation",
+                   Complexity = "Complexity",
+                   Overlap    = "Overlap \u2192 Rich",
+                   Range      = "Range \u2192 Rich"),
+    predictor = case_when(
+      rhs %in% c("tmean", "tmean_sq") ~ "Temperature",
+      rhs == "ppt"                    ~ "Precipitation",
+      rhs == "Complexity"             ~ "Complexity",
+      TRUE                            ~ "Mediator"),
+    sig = ci.lower > 0 | ci.upper < 0)
+
+# 3. Indirect effects (the ind_* defined parameters) ------------------
+indirect_df <- pe %>%
+  filter(op == ":=", grepl("^ind_", lhs)) %>%
+  mutate(
+    label = recode(lhs,
+                   ind_tmean_Overlap            = "Temp \u2192 Overlap",
+                   ind_ppt_Overlap              = "Precip \u2192 Overlap",
+                   ind_Complexity_Overlap       = "Complexity \u2192 Overlap",
+                   ind_tmean_Range              = "Temp \u2192 Range",
+                   ind_Complexity_Range         = "Complexity \u2192 Range",
+                   ind_tmean_Range_Overlap      = "Temp \u2192 Range \u2192 Overlap",
+                   ind_Complexity_Range_Overlap = "Complexity \u2192 Range \u2192 Overlap"),
+    predictor = case_when(
+      grepl("tmean", lhs)      ~ "Temperature",
+      grepl("ppt", lhs)        ~ "Precipitation",
+      grepl("Complexity", lhs) ~ "Complexity",
+      TRUE                     ~ "Mediator"),
+    sig = ci.lower > 0 | ci.upper < 0)
+
+# 4. Total effects (the tot_* defined parameters) ---------------------
+total_df <- pe %>%
+  filter(op == ":=", grepl("^tot_", lhs)) %>%
+  mutate(
+    label = recode(lhs,
+                   tot_tmean      = "Temperature",
+                   tot_ppt        = "Precipitation",
+                   tot_Complexity = "Complexity"),
+    predictor = case_when(
+      lhs == "tot_tmean"      ~ "Temperature",
+      lhs == "tot_ppt"        ~ "Precipitation",
+      lhs == "tot_Complexity" ~ "Complexity",
+      TRUE                    ~ "Mediator"),
+    sig = ci.lower > 0 | ci.upper < 0)
+
+# 5. Shared plotting helper (used across all three panels) ------------
+effect_plot <- function(df, title) {
+  ggplot(df, aes(x = est, y = fct_reorder(label, est),
+                 colour = predictor, alpha = sig)) +
+    geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+    geom_pointrange(aes(xmin = ci.lower, xmax = ci.upper),
+                    fatten = 3, linewidth = 0.6) +
+    scale_colour_manual(values = pred_cols, drop = FALSE, name = "Predictor") +
+    scale_alpha_manual(values = c(`TRUE` = 1, `FALSE` = 0.35), guide = "none") +
+    labs(x = if (STD) "Standardized effect on richness" else "Effect on richness",
+         y = NULL, title = title) +
+    theme_pubr(legend = "right") +
+    theme(plot.title = element_text(face = "bold", size = 11))
+}
+
+# 6. Build and combine -------------------------------------------------
+p_direct   <- effect_plot(direct_df,   "Direct effects on richness")
+p_indirect <- effect_plot(indirect_df, "Indirect effects on richness")
+p_total    <- effect_plot(total_df,    "Total effects on richness")
+
+combined <- (p_direct / p_indirect / p_total) +
+  plot_layout(guides = "collect", heights = c(1, 1, 0.6)) +
+  plot_annotation(
+    title    = "Model m2: decomposition of effects on richness",
+    subtitle = if (STD) "Standardized paths, 95% CI (faded = CI spans 0)"
+    else       "Unstandardized paths, 95% CI (faded = CI spans 0)",
+    tag_levels = "A")
+
+combined
+# 7. Save (filename embeds the STD parameter) -------------------------
+ggsave(file.path(FIG_DIR, sprintf("m2_effects_%s.svg", if (STD) "std" else "raw")),
+       combined, width = 8, height = 10, device = svglite::svglite)
+
+## ============================================================ ##
+## 6. Visualize TOP model (m2): two mediators, Range -> Overlap
+## ============================================================ ##
+library(lavaan); library(ggplot2); library(ggpubr); library(dplyr)
+
+USE_BOOT <- TRUE
+N_BOOT   <- 2000   # bump to 5000 for the final figure
+
+fit_m2 <- sem(m2, data = dat, estimator = "ML",
+              se = if (USE_BOOT) "bootstrap" else "standard",
+              bootstrap = N_BOOT, iseed = 42)
+
+## R^2 for the three endogenous responses (Range, Overlap, rich)
+cat("\n--- R^2 (endogenous) ---\n"); print(round(lavInspect(fit_m2, "rsquare"), 3))
+
+pe <- parameterEstimates(fit_m2, standardized = TRUE, ci = TRUE)
+
+## structural paths (r* = env->Range, b* = env/Range->Overlap,
+##                    c*/q1 = ->rich, d1 = Overlap->rich, d2 = Range->rich)
+paths <- subset(pe, op == "~",
+                c("lhs","rhs","label","est","ci.lower","ci.upper","pvalue","std.all"))
+cat("\n--- structural paths (std.all = fully standardized) ---\n")
+print(paths, row.names = FALSE, digits = 3)
+
+## effect decomposition on richness (the := lines in m2)
+eff <- subset(pe, op == ":=",
+              c("label","est","ci.lower","ci.upper","pvalue"))
+cat("\n--- effects on richness: indirect (ind_*), totals (tot_*), curvature ---\n")
+print(eff, row.names = FALSE, digits = 3)
+
+## relative contribution ranking: |standardized effect on richness|.
+## Temperature splits into a linear-route total plus curvature (level-dependent,
+## so read curv_tmean and the marginal slopes alongside it).
+rank_tbl <- data.frame(
+  driver = c("temperature (linear route)", "temperature (curvature)",
+             "precipitation", "complexity", "Overlap (direct)", "Range (direct)"),
+  effect = c(eff$est[eff$label=="tot_tmean"],  eff$est[eff$label=="curv_tmean"],
+             eff$est[eff$label=="tot_ppt"],    eff$est[eff$label=="tot_Complexity"],
+             paths$std.all[paths$label=="d1"], paths$std.all[paths$label=="d2"]))
+rank_tbl <- rank_tbl[order(-abs(rank_tbl$effect)), ]
+cat("\n--- relative contribution (|standardized effect on richness|) ---\n")
+print(rank_tbl, row.names = FALSE, digits = 3)
+
+## path diagrams -------------------------------------------------------
+library(lavaanPlot)
+lavaanPlot(model = fit_m2, coefs = TRUE, stand = TRUE, sig = 0.05,
+           stars = c("regress"), graph_options = list(rankdir = "LR"))
+
+library(tidySEM)
+lay <- get_layout(
+  "tmean", "tmean_sq", "ppt",     "Complexity",
+  NA,      "Range",   "Overlap",  NA,
+  NA,       NA,       "rich",     NA,
+  rows = 3)
+graph_sem(fit_m2, layout = lay)
+
+## coefficient grabber + back-transform helpers -----------------------
+gb  <- function(l) pe$est[pe$label == l]           # labeled path OR := effect
+mu  <- function(v) mean(dat_raw[[v]]); sdv <- function(v) sd(dat_raw[[v]])
+c1<-gb("c1"); c2<-gb("c2"); c4<-gb("c4"); q1<-gb("q1")
+d1<-gb("d1"); d2<-gb("d2")
+r1<-gb("r1"); r4<-gb("r4"); b1<-gb("b1"); b2<-gb("b2"); b4<-gb("b4"); b5<-gb("b5")
+
+## ============================================================ ##
+## 6.1 Model-implied trends on richness: TOTAL vs DIRECT
+##     direct = coefficient straight into the richness equation
+##     total  = tot_* from the := block (all mediated routes summed)
+##     Pulling total from the defined effect keeps the line and the model
+##     in lockstep: tmean/Complexity route through Overlap, Range, and
+##     Range->Overlap; ppt routes through Overlap only.
+## ============================================================ ##
+trend_panel <- function(v, direct_slope, total_slope, xlab,
+                        quad = 0, mark_vertex = FALSE) {
+  z  <- seq(min(dat[[v]]), max(dat[[v]]), length.out = 250)
+  bt <- function(slope) (slope*z + quad*z^2) * sdv("rich") + mu("rich")
+  df <- rbind(
+    data.frame(x = z*sdv(v)+mu(v), rich = bt(total_slope),  path = "total"),
+    data.frame(x = z*sdv(v)+mu(v), rich = bt(direct_slope), path = "direct"))
+  p <- ggplot() +
+    geom_point(data = data.frame(x = dat_raw[[v]], rich = dat_raw$rich),
+               aes(x, rich), alpha = .5, colour = "grey40") +
+    geom_line(data = df, aes(x, rich, colour = path, linetype = path),
+              linewidth = 1) +
+    scale_colour_manual(values = c(total = "#c1440e", direct = "grey35")) +
+    scale_linetype_manual(values = c(total = 1, direct = 2)) +
+    labs(x = xlab, y = "Estimated richness", colour = NULL, linetype = NULL) +
+    theme_pubr()
+  if (mark_vertex && quad != 0) {
+    vz <- -total_slope / (2*quad)
+    if (vz >= min(z) & vz <= max(z))
+      p <- p + geom_vline(xintercept = vz*sdv(v)+mu(v),
+                          linetype = 3, colour = "grey60")
+  }
+  p
+}
+
+p_temp <- trend_panel("tmean", direct_slope = c1,
+                      total_slope = gb("tot_tmean"),
+                      xlab = "Mean annual temp (bio_1)",
+                      quad = q1, mark_vertex = TRUE)
+p_ppt  <- trend_panel("ppt", direct_slope = c2,
+                      total_slope = gb("tot_ppt"), xlab = "Precipitation (bio_12)")
+p_comp <- trend_panel("Complexity", direct_slope = c4,
+                      total_slope = gb("tot_Complexity"), xlab = "Geodiversity / complexity")
+
+ggarrange(p_temp, p_ppt, p_comp, ncol = 3,
+          common.legend = TRUE, legend = "bottom", labels = "AUTO")
+
+## ============================================================ ##
+## 6.2 Focal mechanism: each mediator -> richness (slopes d1, d2)
+## ============================================================ ##
+mech_panel <- function(med, coef, xlab, col) {
+  z <- seq(min(dat[[med]]), max(dat[[med]]), length.out = 100)
+  ggplot() +
+    geom_point(data = data.frame(m = dat_raw[[med]], rich = dat_raw$rich),
+               aes(m, rich), alpha = .55) +
+    geom_line(data = data.frame(m = z*sdv(med)+mu(med),
+                                rich = (coef*z)*sdv("rich")+mu("rich")),
+              aes(m, rich), linewidth = 1.1, colour = col) +
+    labs(x = xlab, y = "Estimated richness") + theme_pubr()
+}
+p_ov <- mech_panel("Overlap", d1, "Body-size overlap", "#4576b5")
+p_rg <- mech_panel("Range",   d2, "Body-size range",   "#1f6f6f")
+
+## ============================================================ ##
+## 6.3 Mediator drivers: env -> Range, env -> Overlap, Range -> Overlap
+## ============================================================ ##
+driver_panel <- function(v, coef, xlab, med, col = "#555599") {
+  z <- seq(min(dat[[v]]), max(dat[[v]]), length.out = 100)
+  ggplot() +
+    geom_point(data = data.frame(x = dat_raw[[v]], m = dat_raw[[med]]),
+               aes(x, m), alpha = .55) +
+    geom_line(data = data.frame(x = z*sdv(v)+mu(v),
+                                m = (coef*z)*sdv(med)+mu(med)),
+              aes(x, m), linewidth = 1, colour = col) +
+    labs(x = xlab, y = med) + theme_pubr()
+}
+## env -> Range
+p_rg_t <- driver_panel("tmean",      r1, "Mean annual temp (bio_1)", "Range")
+p_rg_c <- driver_panel("Complexity", r4, "Geodiversity / complexity", "Range")
+## env -> Overlap (+ Range -> Overlap, the cross-mediator link b5)
+p_ov_t <- driver_panel("tmean",      b1, "Mean annual temp (bio_1)", "Overlap")
+p_ov_p <- driver_panel("ppt",        b2, "Precipitation (bio_12)",   "Overlap")
+p_ov_c <- driver_panel("Complexity", b4, "Geodiversity / complexity", "Overlap")
+p_ov_r <- driver_panel("Range",      b5, "Body-size range",           "Overlap", col = "#1f6f6f")
+
+ggarrange(p_rg_t, p_rg_c, p_ov,
+          p_ov_t, p_ov_p, p_ov_c,
+          p_ov_r, p_rg,   NULL,
+          ncol = 3, nrow = 3, labels = "AUTO")
+
+## ============================================================ ##
+## 6.4 Effect-decomposition forest plot (bootstrap CIs)
+## ============================================================ ##
+fp_labels <- c(
+  "tot_tmean", "tot_ppt", "tot_Complexity",         # totals
+  "curv_tmean", "slope_tmean_cold", "slope_tmean_warm",  # temp curvature
+  "ind_tmean_Overlap", "ind_ppt_Overlap", "ind_Complexity_Overlap",   # via Overlap
+  "ind_tmean_Range", "ind_Complexity_Range",                          # via Range
+  "ind_tmean_Range_Overlap", "ind_Complexity_Range_Overlap",          # via Range->Overlap
+  "d1", "d2")                                        # mediator direct effects
+fp <- subset(pe, label %in% fp_labels, c("label","est","ci.lower","ci.upper"))
+fp$label <- factor(fp$label, levels = rev(fp_labels))
+
+ggplot(fp, aes(est, label)) +
+  geom_vline(xintercept = 0, linetype = 2, colour = "grey60") +
+  geom_pointrange(aes(xmin = ci.lower, xmax = ci.upper)) +
+  labs(x = "Standardized effect on richness (bootstrap CI)", y = NULL,
+       title = "m2: effect decomposition") + theme_pubr()

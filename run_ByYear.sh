@@ -18,7 +18,7 @@
 set -euo pipefail
 
 REPO=/home/aly/Beetles/BeetleBodySizeVariation
-JOBS=${JOBS:-6}                       # max concurrent runs (override: JOBS=N ./run_ByYear.sh)
+JOBS=${JOBS:-16}                       # max concurrent runs (override: JOBS=N ./run_ByYear.sh)
 
 YEARS=(2018 2019)
 AUGS=(${AUGS:-TRUE FALSE})            # augmentation on and/or off (override: AUGS="FALSE" ...)
