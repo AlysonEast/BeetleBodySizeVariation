@@ -49,7 +49,7 @@ done | xargs -P "$JOBS" -L1 bash -c '
   if [ "$AUG" = TRUE ]; then AUG_TAG=aug; else AUG_TAG=noaug; fi
   tag="${LEVEL}_by_${POOL}_${AUG_TAG}_${YEAR}"
   echo "[start] $tag"
-  if Rscript Overlap_CustomNulls_ByYear.R "$LEVEL" "$POOL" "$YEAR" "$AUG" > "logs/${tag}.log" 2>&1; then
+  if Rscript 5_Overlap_CustomNulls_ByYear.R "$LEVEL" "$POOL" "$YEAR" "$AUG" > "logs/${tag}.log" 2>&1; then
     echo "[ done] $tag"
   else
     echo "[FAIL ] $tag  (see logs/${tag}.log)"
@@ -64,7 +64,7 @@ for PAIR in "${PAIRS[@]}"; do
     if [ "$AUG" = TRUE ]; then AUG_TAG=aug; else AUG_TAG=noaug; fi
     tag="${LEVEL}_by_${POOL}_${AUG_TAG}_avg"
     echo "[avg  ] $LEVEL $POOL $AUG_TAG"
-    Rscript Overlap_CustomNulls_ByYearAverage.R "$LEVEL" "$POOL" "$AUG" > "logs/${tag}.log" 2>&1 \
+    Rscript 6_Overlap_CustomNulls_ByYearAverage.R "$LEVEL" "$POOL" "$AUG" > "logs/${tag}.log" 2>&1 \
       || echo "[FAIL ] avg $LEVEL $POOL $AUG_TAG  (see logs/${tag}.log)"
   done
 done
