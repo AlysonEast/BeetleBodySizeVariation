@@ -82,7 +82,6 @@ plot(clim_pca)
 
 loadings(clim_pca)
 loadings(clim_pca)[,1:2]
-scores(clim_pca)
 
 library("corrplot")
 corrplot(clim_pca$loadings, is.corr=FALSE, col.lim=c(-1,1))
@@ -218,6 +217,18 @@ DTMfiles<-list.files("/media/aly/Penobscot/NEON/LiDAR/DP3.30024.001/neon-aop-pro
 
 rugosity_results <- list()
 
+canopy_cover <- function(las, threshold = 2) {
+  # Keep valid points
+  las <- filter_poi(las, !is.na(Z))
+  # Count all points
+  n_total <- npoints(las)
+  # Count points above canopy threshold
+  n_canopy <- npoints(filter_poi(las, Z >= threshold))
+  # Return proportion
+  n_canopy / n_total
+}
+
+
 sites_list<-sort(unique(BETpts$siteID))
 AOP_list<-sites_list
 AOP_list[AOP_list == "DCFS"] <- "WOOD"
@@ -290,7 +301,7 @@ for (i in 1:length(sites_list)) {#
     las_norm <- normalize_height(las, dtm_plot)
 
     # 1 m voxel structural density
-    vox <- voxel_metrics(las,
+    vox <- voxel_metrics(las_norm,
                          ~length(Z),
                          res = 0.5)
     
@@ -315,20 +326,26 @@ for (i in 1:length(sites_list)) {#
     # Additional structure metrics
     mean_height <- mean(las_norm@data$Z, na.rm=TRUE)
     height_98 <- quantile(las_norm@data$Z, na.rm=TRUE, probs = 0.98)
-    
     sd_height <- sd(las_norm@data$Z,na.rm=TRUE)
+    cover <- canopy_cover(las_norm, threshold = 2)
+    
+    #Additional Terrain Metrics
+    t<-values(dtm_plot, na.rm=TRUE)
+    geodiv <- sqrt(mean((t - mean(t))^2))
     
     data.frame(plotID = pts$plotID[j],
                siteID = sites_list[i],
                rugosity_RC = rugosity_RC,
                height_98 = height_98,
                mean_height = mean_height,
+               canopy_cover = cover,
                sd_height = sd_height,
-               n_points = npoints(las_norm))
+               n_points = npoints(las_norm),
+               geodiv = geodiv)
 })
   rugosity_results[[i]] <- site_results
   }
 
 rugosity_results <- bind_rows(rugosity_results)
   
-write.csv(rugosity_results, "./Outputs/BETplot_Rugosity")
+write.csv(rugosity_results, "./Outputs/BETplot_Rugosity.csv")
