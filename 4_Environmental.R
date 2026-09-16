@@ -89,12 +89,24 @@ corrplot(clim_pca$loadings, is.corr=FALSE, col.lim=c(-1,1))
 pts_pca<-cbind(plots_climate, clim_pca$scores)
 plot(pts_pca, max.plot=100)
 
-NPP<-read.csv("../NEON_MODIS_NPP_2018_2019.csv") #from https://code.earthengine.google.com/b41a55076352b2d9e21ac5e74bf337bc
-head(NPP)
-
-pts_gpp<-merge(pts_pca, NPP[,c("plotID","Npp")], by="plotID")
-
 write.csv(pts_pca, "./Outputs/BeetlePlotswEnvData.csv", row.names = FALSE)
+
+velocity<-rast("/media/aly/Penobscot/Data/doi_10_5061_dryad_b13j1__v20111101/Dryad+Archive+Files/Velocity.tif")
+pts_velocity<-st_transform(BETpts, st_crs(velocity))
+
+velocity_vals<-extract(velocity, pts_velocity)[2]
+str(velocity_vals)
+head(velocity_vals)
+pts_velocity <- cbind(pts_velocity, velocity_vals)
+
+hist(pts_velocity$Velocity)
+plot(pts_velocity["Velocity"])
+
+pts_velocityDF<-as.data.frame(pts_velocity)
+head(pts_velocityDF)
+pts_velocityDF[,c(1:(ncol(pts_velocityDF)-1))]
+
+write.csv(pts_velocityDF[,c(1:(ncol(pts_velocityDF)-1))], "./Outputs/BeetlePlotswVelocity.csv", row.names = FALSE)
 
 ### Plot Level LiDAR data ####
 library(neonUtilities)
