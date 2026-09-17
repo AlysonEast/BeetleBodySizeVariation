@@ -91,6 +91,10 @@ plot(pts_pca, max.plot=100)
 
 write.csv(pts_pca, "./Outputs/BeetlePlotswEnvData.csv", row.names = FALSE)
 
+
+## Extract velocity
+sites<-read_sf("../NEON_terrestrialSamplingBoundariesDissolve.shp")
+
 velocity<-rast("/media/aly/Penobscot/Data/doi_10_5061_dryad_b13j1__v20111101/Dryad+Archive+Files/Velocity.tif")
 pts_velocity<-st_transform(BETpts, st_crs(velocity))
 
@@ -107,6 +111,18 @@ head(pts_velocityDF)
 pts_velocityDF[,c(1:(ncol(pts_velocityDF)-1))]
 
 write.csv(pts_velocityDF[,c(1:(ncol(pts_velocityDF)-1))], "./Outputs/BeetlePlotswVelocity.csv", row.names = FALSE)
+
+sites<-st_transform(sites, st_crs(velocity))
+velocity_vals<-extract(velocity, sites, fun="mean")#[2]
+str(velocity_vals)
+head(velocity_vals)
+velocity_vals<-extract(velocity, sites, fun="mean")[2]
+sites <- cbind(sites, velocity_vals)
+
+sitesDF<-as.data.frame(sites[,c("siteID","Velocity")])
+head(sitesDF)
+sitesDF<-sitesDF[,1:2]
+write.csv(sitesDF, "./Outputs/BeetleSiteswVelocity.csv", row.names = FALSE)
 
 ### Plot Level LiDAR data ####
 library(neonUtilities)
