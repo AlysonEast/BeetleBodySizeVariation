@@ -179,9 +179,11 @@ vel<-read.csv("./Outputs/BeetleSiteswVelocity.csv")
 siteDF<-merge(siteDF, vel, by="siteID")
 #### Pair site#
 
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","overlap_unnorm_obs","niche_range_obs","overlap_depth_obs","richness")])
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","bio01_sq","overlap_unnorm_obs","niche_range_obs","overlap_depth_obs","richness")])
 siteDF$log_richness<-log10(siteDF$richness)
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","overlap_unnorm_obs","niche_range_obs","overlap_depth_obs","richness","log_richness")])
+siteDF$log_bio01_sq<-log10(siteDF$bio01_sq+.001)
+siteDF$log_bio01_sq
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","overlap_unnorm_obs","niche_range_obs","overlap_depth_obs","richness","log_richness")])
 
 
 ## ============================================================ ##
@@ -193,6 +195,7 @@ RICH_COL   <- "log_richness"
 TMEAN_COL  <- "bio01_mean" 
 NPP_COL  <- "Npp"       
 VELOCITY_COL  <- "Velocity"       
+GEODIV_COL  <- "log_bio01_sq"       
 
 
 ## Transforms (applied before standardizing)
@@ -207,6 +210,7 @@ dat <- data.frame(
   tmean  = siteDF[[TMEAN_COL]],
   npp    = siteDF[[NPP_COL]],
   velocity    = siteDF[[VELOCITY_COL]],
+  SpatialHet    = siteDF[[GEODIV_COL]],
   range      = siteDF[[RANGE_COL]],
   cooccurrence = siteDF[[COOCCURANCE_COL]],
   rich   = siteDF[[RICH_COL]]
@@ -214,7 +218,7 @@ dat <- data.frame(
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
 ## Geodiv column all 47 sites should be retained -- verify in the printout.
-model_vars <- c("tmean", "npp", "cooccurrence", "range", "rich","velocity")
+model_vars <- c("tmean", "npp", "cooccurrence", "range", "rich","velocity","SpatialHet")
 cc <- complete.cases(dat[, model_vars])
 
 cat("\n--- complete-case summary ---\n")
@@ -235,7 +239,7 @@ if (STANDARDIZE) {
 ## ============================================================ ##
 #___________________Env Only___________________
 m_env_direct <- '
-  rich ~ c1*tmean + c2*npp + c3*velocity
+  rich ~ c1*tmean + c2*npp + c3*velocity + c4*SpatialHet
 '
 sem_env_direct<-sem(m_env_direct, data = dat, estimator = "MLR")
 lavaanPlot(model = sem_env_direct,
@@ -245,20 +249,23 @@ lavaanPlot(model = sem_env_direct,
 
 #___________________Env and Range___________________
 m_env_range <- '
-  range ~ r1*tmean + r2*npp + r3*velocity
+  range ~ r1*tmean + r2*npp + r3*velocity + r4*SpatialHet
 
-  rich ~ c1*tmean + c2*npp + c3*velocity + 
+  rich ~ c1*tmean + c2*npp + c3*velocity + c4*SpatialHet + 
          d1*range
 
   # indirect paths to richness
   ind_temp_range := r1*d1
   ind_npp_range := r2*d1
   ind_velocity_range := r3*d1
+  ind_spatial_range := r4*d1
   
   # total effects on richness
   tot_tmean := c1 + r1*d1
   tot_npp := c2 + r2*d1
   tot_velocity := c3 + r3*d1
+  tot_spatial := c4 + r4*d1
+
 '
 sem_env_range<-sem(m_env_range, data = dat, estimator = "MLR")
 lavaanPlot(model = sem_env_range,
@@ -266,8 +273,27 @@ lavaanPlot(model = sem_env_range,
            stand = TRUE,          # Standardize the coefficients
            stars = c("regress"))  # Append significance stars to regressions
 
-m1_env_range <- '
-  range ~ r1*tmean + r3*velocity
+m1a_env_range <- '
+  range ~ r1*tmean + r3*velocity + r4*SpatialHet
+
+  rich ~ c1*tmean + c3*velocity + c4*SpatialHet + 
+         d1*range
+
+  # indirect paths to richness
+  ind_temp_range := r1*d1
+  ind_velocity_range := r3*d1
+  ind_spatial_range := r4*d1
+  
+  # total effects on richness
+  tot_tmean := c1 + r1*d1
+  tot_velocity := c3 + r3*d1
+  tot_spatial := c4 + r4*d1
+'
+sem1a_env_range<-sem(m1a_env_range, data = dat, estimator = "MLR")
+
+
+m1b_env_range <- '
+  range ~ r1*tmean + r3*velocity +
 
   rich ~ c1*tmean + c3*velocity + 
          d1*range
@@ -314,21 +340,24 @@ sem3_env_range<-sem(m3_env_range, data = dat, estimator = "MLR")
 
 #___________________Env and Depth___________________
 m_env_depth <- '
-  cooccurrence ~ o1*tmean + o2*npp + o3*velocity
+  cooccurrence ~ o1*tmean + o2*npp + o3*velocity + o4*SpatialHet
             
-  rich ~ c1*tmean + c2*npp + c3*velocity + 
+  rich ~ c1*tmean + c2*npp + c3*velocity + c4*SpatialHet +
          d2*cooccurrence
 
   # indirect paths to richness
   ind_temp_co := o1*d2
   ind_npp_co := o2*d2
   ind_velocity_co := o3*d2
+  ind_spatial_co := o4*d2
   
   # total effects on richness
   tot_tmean := c1 + o1*d2
   tot_npp := c2 +  o2*d2
   tot_velocity := c3 + o3*d2
+  tot_spatial := c4 + o4*d2
 '
+
 sem_env_depth<-sem(m_env_depth, data = dat, estimator = "MLR")
 lavaanPlot(model = sem_env_depth,
            coefs = TRUE,          # Display the path coefficients
@@ -375,26 +404,29 @@ sem2_env_depth<-sem(m2_env_depth, data = dat, estimator = "MLR")
 
 #___________________Env Range and Depth___________________
 m_env_range_depth <- '
-  range ~ r1*tmean + r2*npp + r3*velocity
+  range ~ r1*tmean + r2*npp + r3*velocity + r4*SpatialHet
 
-  cooccurrence ~ o1*tmean + o2*npp + o3*velocity
+  cooccurrence ~ o1*tmean + o2*npp + o3*velocity + o4*SpatialHet
             
-  rich ~ c1*tmean + c2*npp + c3*velocity + 
+  rich ~ c1*tmean + c2*npp + c3*velocity + c4*SpatialHet +
          d1*range + d2*cooccurrence
 
   # indirect paths to richness
   ind_temp_range := r1*d1
   ind_npp_range := r2*d1
   ind_velocity_range := r3*d1
-  
+  ind_spatial_range := r4*d1
+
   ind_temp_co := o1*d2
   ind_npp_co := o2*d2
   ind_velocity_co := o3*d2
-  
+  ind_spatial_co := o4*d2
+
   # total effects on richness
   tot_tmean := c1 + r1*d1 + o1*d2
   tot_npp := c2 + r2*d1 + o2*d2
   tot_velocity := c3 + r3*d1 + o3*d2
+  tot_spatial := c4 + r4*d1 + o4*d2
 '
 sem_env_range_depth<-sem(m_env_range_depth, data = dat, estimator = "MLR")
 lavaanPlot(model = sem_env_range_depth,
