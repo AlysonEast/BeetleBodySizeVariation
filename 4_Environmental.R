@@ -89,7 +89,9 @@ corrplot(clim_pca$loadings, is.corr=FALSE, col.lim=c(-1,1))
 pts_pca<-cbind(plots_climate, clim_pca$scores)
 plot(pts_pca, max.plot=100)
 
-write.csv(pts_pca, "./Outputs/BeetlePlotswEnvData.csv", row.names = FALSE)
+pts_pca_df<-as.data.frame(pts_pca)
+
+write.csv(pts_pca_df[,1:(ncol(pts_pca_df)-1)], "./Outputs/BeetlePlotswEnvData.csv", row.names = FALSE)
 
 
 ## Extract velocity
