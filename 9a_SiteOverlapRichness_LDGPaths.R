@@ -155,6 +155,37 @@ ggplot(preExclusion, aes(x=richness, y=n_overlap_sp)) +
   geom_abline(intercept = 0, slope = 1) +
   theme_pubr()
 
+png("./Figures/SiteRichnessMetrics.png", res = 300, height = 8, width = 8, units = "in")
+ggplot(siteDF, aes(x=niche_range_obs, y=overlap_depth_obs, colour = richness)) +
+  geom_point(size=4) +
+  scale_colour_gradient(low = "purple", high = "orange") +
+  theme_pubr() +
+  xlab("Niche Space") +
+  ylab("Average Co-occurance") +
+  labs(colour = "Observed \n Richness") +
+  annotate(geom = "text", x = 1.2, y = 3.8, label = "Highest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .25, y = .4, label = "Lowest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .25, y = 3.8, label = "Lowest Total \n Partitioning", size = 5)+
+  annotate(geom = "text", x = 1.2, y = .4, label = "Highest Total \n Partitioning", size = 5)+
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.9, 0.7))
+dev.off()
+png("./Figures/SiteRichnessMetrics_blank.png", res = 300, height = 8, width = 8, units = "in")
+ggplot(siteDF, aes(x=niche_range_obs, y=overlap_depth_obs)) +
+  geom_point(size=4, colour="white") +
+  theme_pubr() +
+  xlab("Niche Space") +
+  ylab("Average Co-occurance") +
+  labs(colour = "Observed \n Richness") +
+  annotate(geom = "text", x = 1.2, y = 3.8, label = "Highest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .25, y = .4, label = "Lowest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .25, y = 3.8, label = "Lowest Total \n Partitioning", size = 5)+
+  annotate(geom = "text", x = 1.2, y = .4, label = "Highest Total \n Partitioning", size = 5) +
+  theme(legend.position = "inside",
+        legend.position.inside = c(0.9, 0.9))
+dev.off()
+
+
 #Env Variaibles
 siteDF$domainID<-NULL
 neonDivData::neon_sites
@@ -293,7 +324,7 @@ sem1a_env_range<-sem(m1a_env_range, data = dat, estimator = "MLR")
 
 
 m1b_env_range <- '
-  range ~ r1*tmean + r3*velocity +
+  range ~ r1*tmean + r3*velocity
 
   rich ~ c1*tmean + c3*velocity + 
          d1*range
@@ -306,7 +337,7 @@ m1b_env_range <- '
   tot_tmean := c1 + r1*d1
   tot_velocity := c3 + r3*d1
 '
-sem1_env_range<-sem(m1_env_range, data = dat, estimator = "MLR")
+sem1_env_range<-sem(m1b_env_range, data = dat, estimator = "MLR")
 summary(sem1_env_range)
 
 m2_env_range <- '
@@ -511,7 +542,8 @@ models <- list(
   "Full_Env_Depth"             = m_env_depth,
   "Full_Env_Range"             = m_env_range,
   "Full_Env_Range_Depth"       = m_env_range_depth,
-  "m1_Env_Range"               = m1_env_range,
+  "m1a_Env_Range"               = m1a_env_range,
+  "m1b_Env_Range"               = m1b_env_range,
   "m2_Env_Range"               = m2_env_range,
   "m3_Env_Range"               = m3_env_range,
   "m1_Env_Depth"               = m1_env_depth,
@@ -563,7 +595,7 @@ lavaanPlot(model = fits$`m1_Env_Depth`,
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`m1_Env_Range`,
+lavaanPlot(model = fits$`m1b_Env_Range`,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -574,6 +606,12 @@ lavaanPlot(model = fits$`m2_Env_Range_Depth`,
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
+lavaanPlot(model = fits$`m3_Env_Range_Depth`,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
 
 library(tidySEM)
 lay <- get_layout(
@@ -595,12 +633,19 @@ make_sem_graph <- function(model, layout, scale = 5) {
 }
 
 p1 <- make_sem_graph(fits$`Full_env_only`, lay)
-p2 <- make_sem_graph(fits$`m1_Env_Range`, lay)
+p2 <- make_sem_graph(fits$`m1b_Env_Range`, lay)
 p3 <- make_sem_graph(fits$`m1_Env_Depth`, lay)
 p4 <- make_sem_graph(fits$`m2_Env_Range_Depth`, lay)
 
 library(patchwork)
-png("./Figures/SEMs/sitesSEMsLDG.png", res = 300, height = 7, width = 10, units = "in")
+png("./Figures/SEMs/sitesSEMsLDG.png", res = 300, height = 10, width = 13, units = "in")
 (p1 | p2) /
   (p3 | p4)
+dev.off()
+
+summary(sem2_env_range_depth)
+
+p4b <- make_sem_graph(fits$`m3_Env_Range_Depth`, lay)
+png("./Figures/SEMs/sitesSEMsLDG_EnvRangeDepthEquivelent.png", res = 300, height = 10, width = 13, units = "in")
+(p4 | p4b)
 dev.off()
