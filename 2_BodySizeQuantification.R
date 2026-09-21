@@ -40,7 +40,7 @@ ElytraSummary <- ElytraSummary %>%
 table(ElytraSummary$scientificName_Species)
 str(ElytraSummary)
 
-#png("./Figures/BodySizeQuantification/AllBodySizeDist.png", units = "in", width = 6, height = 4, res=300)
+png("./Figures/BodySizeQuantification/AllBodySizeDist.png", units = "in", width = 6, height = 4, res=300)
 ggarrange(ggplot(data = ElytraSummary, aes(x=mean_dist)) +
             geom_histogram() +
             theme_pubr() +
@@ -57,7 +57,7 @@ dev.off()
 #What is the shape of distributions?####
 ElytraSummary_n<-subset(ElytraSummary, n_obs>=cutoff)
 #Skewness#
-#png("./Figures/BodySizeQuantification/SpeciesDistribution_Skew.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Skew.png", units = "in", width = 6, height = 5, res=300)
 ggplot(data = ElytraSummary_n, aes(skew)) +
   geom_histogram() + 
   theme(legend.position="none") +
@@ -113,7 +113,7 @@ ggplot(dat, aes(kurtosis, rank, colour = sig)) +
   guides(color = guide_legend(title = "Significance"))
 dev.off()
 
-#png("./Figures/BodySizeQuantification/SpeciesDistribution_KurtosisHigh.png", units = "in", width = 3, height = 3, res=300, bg = "transparent")
+png("./Figures/BodySizeQuantification/SpeciesDistribution_KurtosisHigh.png", units = "in", width = 3, height = 3, res=300, bg = "transparent")
 ggplot(subset(all_elytra,scientificName_Species=="Amara conflata"), aes(cm_elytra_max_length)) +
   geom_histogram() +  
   geom_density() +
@@ -123,7 +123,7 @@ ggplot(subset(all_elytra,scientificName_Species=="Amara conflata"), aes(cm_elytr
        y = "Count of Indivudals")
 dev.off()
 
-#png("./Figures/BodySizeQuantification/SpeciesDistribution_KurtosisLow.png", units = "in", width = 3, height = 3, res=300, bg = "transparent")
+png("./Figures/BodySizeQuantification/SpeciesDistribution_KurtosisLow.png", units = "in", width = 3, height = 3, res=300, bg = "transparent")
 ggplot(subset(all_elytra,scientificName_Species=="Cyclotrachelus constrictus"), aes(cm_elytra_max_length)) +
   geom_histogram() +  
   geom_density() +
@@ -136,7 +136,7 @@ dev.off()
 
 
 #Modality
-#png("./Figures/BodySizeQuantification/SpeciesDistribution_Modality.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/SpeciesDistribution_Modality.png", units = "in", width = 6, height = 5, res=300)
 ggplot(data = ElytraSummary_n, aes(as.numeric(dpval))) +
   geom_histogram() +
   geom_vline(xintercept = 0.05) +
@@ -273,6 +273,13 @@ ggplot(subset(dat, n>=cutoff), aes(kurtosis, rank, colour = sig)) +
   guides(color = guide_legend(title = "Significance"))
 dev.off()
 
+# within-species KDE bandwidths from well-sampled cells, on the log10 axis
+bw_tab <- all_elytra %>%
+  group_by(scientificName_Species, siteID) %>%   # plotID for the plot scale
+  filter(n() >= 20) %>%
+  summarise(bw = bw.nrd0(log10(cm_elytra_max_length)), n = n(), .groups = "drop")
+
+summary(bw_tab$bw); median(bw_tab$bw)
 
 dat <- species_site_stats %>%
   arrange(kurtosis) %>%
@@ -304,7 +311,7 @@ dev.off()
 
 
 #Modality
-#png("./Figures/BodySizeQuantification/plotDistribution_Modality.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/plotDistribution_Modality.png", units = "in", width = 6, height = 5, res=300)
 ggplot(data = subset(species_plot_stats, n>=cutoff), aes(as.numeric(dpval))) +
   geom_histogram() +
   geom_vline(xintercept = 0.05) +
@@ -482,7 +489,7 @@ summary(mod)
 emmeans(mod, pairwise ~ scale)
 
 
-#png("./Figures/BodySizeQuantification/CV_Nested.png", units = "in", width = 7, height = 6, res=300)
+png("./Figures/BodySizeQuantification/CV_Nested.png", units = "in", width = 7, height = 6, res=300)
 ggplot(var_all_scales,
        aes(cv2_pct)) +
   theme_pubr() + 
@@ -505,7 +512,7 @@ ggplot(var_all_scales,
               alpha = 0.2) +
   theme_pubr()
 
-#png("./Figures/NestedCVpct.png", height = 10, width = 10, units = "in", res = 300)
+png("./Figures/NestedCVpct.png", height = 10, width = 10, units = "in", res = 300)
 ggplot(subset(var_all_scales, scientificName_Species!="Carabidae sp."),
        aes(scale, cv2_pct, group = scientificName_Species, col = siteID, shape = domainID)) +
   theme_pubr() + 
@@ -710,7 +717,7 @@ annotate_figure(
 )
 dev.off()
 
-#png("./Figures/BodySizeQuantification/SpeciesNestedWrappedDensityPlots.png", units = "in", width = 8, height = 6, res=300)
+png("./Figures/BodySizeQuantification/SpeciesNestedWrappedDensityPlots.png", units = "in", width = 8, height = 6, res=300)
 annotate_figure(
   ggarrange(
     ggplot(data = subset(all_elytra, scientificName_Species==species)%>%
@@ -771,7 +778,7 @@ dev.off()
 #Are high CV plots just combined across multiple years?
 
 
-#png("./Figures/NestedVar.png", height = 10, width = 12, units = "in", res = 300)
+png("./Figures/NestedVar.png", height = 10, width = 12, units = "in", res = 300)
 ggplot(subset(var_all_scales, scientificName_Species!="Carabidae sp." &  scientificName_Species!="Pterostichus coracinus"),
        aes(scale, var_cm, group = scientificName_Species, col = siteID, shape = domainID)) +
   theme_pubr() + 
@@ -1059,7 +1066,7 @@ all_elytra_lat_subset <- all_elytra_lat %>%
   filter(n_distinct(siteID.y) > 3) %>%
   ungroup()
 
-#png("./Figures/BodySizeQuantification/SpeciesBodysize_latitude.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/SpeciesBodysize_latitude.png", units = "in", width = 6, height = 5, res=300)
 ggplot(all_elytra_lat_subset, aes(x=latitude, y=cm_elytra_max_length, colour = scientificName_Species)) +
   geom_point(alpha=0.2) +
   geom_smooth(method = "lm")+
@@ -1072,7 +1079,7 @@ ggplot(all_elytra_lat_subset, aes(x=latitude, y=cm_elytra_max_length, colour = s
 dev.off()
 
 #Variance in size
-#png("./Figures/BodySizeQuantification/SpeciesCVpct(plot)_latitude.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/SpeciesCVpct(plot)_latitude.png", units = "in", width = 6, height = 5, res=300)
 ggplot(subset(plot_species_var, n>20), aes(x=latitude, y=cv2_pct)) +
   geom_point(alpha=0.2) +
   geom_smooth(method = "lm")+
@@ -1091,7 +1098,7 @@ ggplot(subset(plot_species_var, n>20), aes(x=latitude, y=cv2_pct, colour = scien
   theme_pubr() +
   theme(legend.position = "None")
 
-#png("./Figures/BodySizeQuantification/CVpct(plot)_N.png", units = "in", width = 6, height = 5, res=300)
+png("./Figures/BodySizeQuantification/CVpct(plot)_N.png", units = "in", width = 6, height = 5, res=300)
 ggplot(plot_species_var, aes(x=log10(n), y=log10(cv2_pct))) +
   geom_point(alpha=0.2) +
   theme_pubr() +
