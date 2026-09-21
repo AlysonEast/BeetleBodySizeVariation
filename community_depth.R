@@ -8,9 +8,7 @@
 # occupied width.
 #
 # Construction (peak-scaled depth):
-#   1. estimate one density per species on a COMMON grid -- identical grid /
-#      bw / n to community_overlap_weighted() so the two metrics see the same
-#      densities;
+#   1. estimate one density per species on a COMMON grid;
 #   2. peak-scale each density to its own maximum, so every species contributes
 #      at most 1 where it is densest and tapers to 0 in its tails
 #      (o_i(x) = f_i(x) / max f_i);
@@ -20,8 +18,24 @@
 #
 # Each species contributes equally (presence-based): depth is deliberately NOT
 # abundance-weighted, which keeps it robust to the pitfall activity-density bias
-# that contaminates the abundance weights used by the overlap metrics. For an
-# abundance-weighted variant, scale o_i by w_sp[s] / max(w_sp) before summing.
+# that contaminates the abundance weights used elsewhere.
+#
+# BANDWIDTH / ELIGIBILITY (changed): every species with >= 1 individual is kept,
+# including singletons, so depth can run on observed data without augmentation.
+# That is only possible with a FIXED numeric bandwidth: the data-driven default
+# ("nrd0") calls bw.nrd0(), which needs >= 2 points and errors on a singleton.
+# Supply the bandwidth via density_args = list(bw = <number>), measured on the
+# same axis as `traits` (log10 elytra length). With a single common width every
+# species -- one-specimen or well-sampled -- gets the same smoothing, so the
+# peak-scaled co-occupancy sum stays comparable across species. If you leave bw
+# at "nrd0" and any species has a single individual, the function stops with a
+# message rather than failing cryptically.
+#
+# NOTE: because the bandwidth is now fixed rather than per-species "nrd0", these
+# densities no longer match community_overlap_weighted()'s densities. That is by
+# design here: depth is computed on observed, all-species data while the pairwise
+# overlaps (where used) run on their own inputs, so the two answer deliberately
+# different questions.
 #
 # INTERPRETATION: observed depth scales with richness by construction (more
 # species in a bounded axis -> more pile-up), so the quantity to use downstream
@@ -35,11 +49,11 @@
 #   sp            species label per individual (same length as traits)
 #   occ_probs     quantiles defining the occupied range (default 2.5-97.5%,
 #                 matching niche_range)
-#   density_args  optional list; supports bw and n (defaults "nrd0", 512),
-#                 matching community_overlap_weighted / Ostats
+#   density_args  optional list; supports bw and n. Pass a NUMERIC bw (fixed
+#                 width) to keep single-specimen species; n defaults to 512.
 #
 # RETURNS a single numeric depth (mean species co-occupancy over the occupied
-# range), or NA if < 2 eligible species.
+# range), or NA if < 2 species.
 # -------------------------------------------------------------------------
 
 community_depth <- function(traits, sp,
@@ -49,25 +63,29 @@ community_depth <- function(traits, sp,
   traits <- as.numeric(traits)
   sp     <- as.character(sp)
 
-  # clean: drop missing traits / labels, then species with < 2 individuals
-  # (identical eligibility rule to community_overlap_weighted)
+  # clean: drop missing traits / labels only. Singletons are KEPT (>= 1), so a
+  # one-specimen species contributes a single kernel at its value.
   ok <- is.finite(traits) & !is.na(sp) & sp != ""
   traits <- traits[ok]; sp <- sp[ok]
-  n_ind    <- table(sp)
-  eligible <- names(n_ind)[n_ind > 1]
-  keep     <- sp %in% eligible
-  traits <- traits[keep]; sp <- sp[keep]
 
   uniquespp <- sort(unique(sp))
   if (length(uniquespp) < 2) return(NA)
 
-  # common grid limits across all species (identical to community_overlap_weighted:
-  # extend the data range by +/- 0.5*range). from/to/n are fixed, so every
-  # species' density is evaluated on the SAME x grid and the y's are summable.
-  rng  <- range(traits)
-  grid <- rng + c(-0.5, 0.5) * diff(rng)
   bw <- if ("bw" %in% names(density_args)) density_args[["bw"]] else "nrd0"
   n  <- if ("n"  %in% names(density_args)) density_args[["n"]]  else 512
+
+  # a data-driven "nrd0" bandwidth cannot be estimated from a single point, so a
+  # fixed numeric bw is required once singletons are in play.
+  if (!is.numeric(bw) && any(table(sp) < 2))
+    stop("community_depth: a single-specimen species is present, so bw must be a ",
+         "fixed number (e.g. density_args = list(bw = DEPTH_BW)); '", bw,
+         "' cannot be estimated from one point.")
+
+  # common grid limits across all species (extend the data range by +/- 0.5*range).
+  # from/to/n are fixed, so every species' density is on the SAME x grid and the
+  # y's are summable.
+  rng  <- range(traits)
+  grid <- rng + c(-0.5, 0.5) * diff(rng)
 
   # peak-scaled occupancy summed across species -> D(x)
   xg    <- NULL

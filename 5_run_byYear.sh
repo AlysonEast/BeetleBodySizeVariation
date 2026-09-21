@@ -1,27 +1,25 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Drive Overlap_CustomNulls_ByYear.R across every AUGMENT x YEAR x (LEVEL,POOL)
-# pairing, concurrently, then average the two years for each pairing.
-#
-# Safe to parallelize: each run is an independent Rscript process that writes a
-# uniquely named output (<LEVEL>_by_<POOL>_<aug|noaug>_<YEAR>_*Null.csv), so runs
-# never collide -- they only share read-only inputs. The only limit is RAM/CPU,
-# so concurrency is capped at $JOBS.
+# Drive CommunityShape_CustomNulls_ByYear.R across every YEAR x (LEVEL, POOL)
+# pairing, concurrently. No augmentation dimension and no year-averaging stage:
+# each run is one Rscript process writing a uniquely named set of outputs
+# (<LEVEL>_by_<POOL>_<YEAR>_{Pool,Individual,SwapMeans}Null.csv), so runs never
+# collide -- they only share read-only inputs. Concurrency is capped at $JOBS.
 #
 # Prereqs: run CalculateAbundance_ByYear.R once first (the per-year abundance
-# files must exist), and apply the commandArgs / AUGMENT edits to both R scripts.
+# files must exist), and keep community_depth.R beside the R script (it is
+# sourced).
 #
-# Usage:  ./run_ByYear.sh                    # full grid, $JOBS at a time
-#         JOBS=4 ./run_ByYear.sh             # cap concurrency at 4
-#         AUGS="FALSE" ./run_ByYear.sh       # only the no-augmentation runs
+# Usage:  ./run_byYear.sh                 # full grid, $JOBS at a time
+#         JOBS=4 ./run_byYear.sh          # cap concurrency at 4
+#         YEARS="2018" ./run_byYear.sh    # only one year
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
 REPO=/home/aly/Beetles/BeetleBodySizeVariation
-JOBS=${JOBS:-16}                       # max concurrent runs (override: JOBS=N ./run_ByYear.sh)
+JOBS=${JOBS:-16}                       # max concurrent runs (override: JOBS=N ./run_byYear.sh)
 
-YEARS=(2018 2019)
-AUGS=(${AUGS:-TRUE FALSE})            # augmentation on and/or off (override: AUGS="FALSE" ...)
+YEARS=(${YEARS:-2018 2019})            # override: YEARS="2018" ./run_byYear.sh
 # Valid focal->pool pairings only: a pool must sit above the focal level, so
 # site->site is degenerate and omitted. Edit this list to taste.
 PAIRS=(
@@ -35,38 +33,22 @@ PAIRS=(
 cd "$REPO"
 mkdir -p logs
 
-#### STAGE 1: run the grid, up to $JOBS at a time ####
-# Emit one "<LEVEL> <POOL> <YEAR> <AUGMENT>" line per job; xargs keeps $JOBS alive.
-echo ">> stage 1: ${#PAIRS[@]} pairings x ${#YEARS[@]} years x ${#AUGS[@]} aug settings, $JOBS at a time"
-for AUG in "${AUGS[@]}"; do
-  for YEAR in "${YEARS[@]}"; do
-    for PAIR in "${PAIRS[@]}"; do
-      echo "$PAIR $YEAR $AUG"
-    done
+#### run the grid, up to $JOBS at a time ####
+# Emit one "<LEVEL> <POOL> <YEAR>" line per job; xargs keeps $JOBS alive.
+echo ">> ${#PAIRS[@]} pairings x ${#YEARS[@]} years, $JOBS at a time"
+for YEAR in "${YEARS[@]}"; do
+  for PAIR in "${PAIRS[@]}"; do
+    echo "$PAIR $YEAR"
   done
 done | xargs -P "$JOBS" -L1 bash -c '
-  LEVEL=$1; POOL=$2; YEAR=$3; AUG=$4
-  if [ "$AUG" = TRUE ]; then AUG_TAG=aug; else AUG_TAG=noaug; fi
-  tag="${LEVEL}_by_${POOL}_${AUG_TAG}_${YEAR}"
+  LEVEL=$1; POOL=$2; YEAR=$3
+  tag="${LEVEL}_by_${POOL}_${YEAR}"
   echo "[start] $tag"
-  if Rscript 5_Overlap_CustomNulls_ByYear.R "$LEVEL" "$POOL" "$YEAR" "$AUG" > "logs/${tag}.log" 2>&1; then
+  if Rscript CommunityShape_CustomNulls_ByYear.R "$LEVEL" "$POOL" "$YEAR" > "logs/${tag}.log" 2>&1; then
     echo "[ done] $tag"
   else
     echo "[FAIL ] $tag  (see logs/${tag}.log)"
   fi
 ' _
-
-#### STAGE 2: average the two years for each (pairing x aug) (fast; serial) ####
-echo ">> stage 2: averaging years per pairing"
-for PAIR in "${PAIRS[@]}"; do
-  set -- $PAIR; LEVEL=$1; POOL=$2
-  for AUG in "${AUGS[@]}"; do
-    if [ "$AUG" = TRUE ]; then AUG_TAG=aug; else AUG_TAG=noaug; fi
-    tag="${LEVEL}_by_${POOL}_${AUG_TAG}_avg"
-    echo "[avg  ] $LEVEL $POOL $AUG_TAG"
-    Rscript 6_Overlap_CustomNulls_ByYearAverage.R "$LEVEL" "$POOL" "$AUG" > "logs/${tag}.log" 2>&1 \
-      || echo "[FAIL ] avg $LEVEL $POOL $AUG_TAG  (see logs/${tag}.log)"
-  done
-done
 
 echo ">> all done. Outputs in ./Outputs, logs in ./logs"
