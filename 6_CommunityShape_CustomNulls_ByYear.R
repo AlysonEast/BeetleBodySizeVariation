@@ -209,7 +209,7 @@ cw_moments <- function(traits, sp, abund) {
   traits <- as.numeric(traits); sp <- as.character(sp)
   ok <- is.finite(traits) & !is.na(sp) & sp %in% names(abund)
   traits <- traits[ok]; sp <- sp[ok]
-  if (length(traits) < 1 || length(unique(sp)) < 2) return(out)
+  if (length(traits) < 1) return(out)
 
   spp <- unique(sp)
   p   <- abund[spp]
@@ -251,7 +251,7 @@ community_metrics <- function(traits, sp, abund) {
 
   out <- c(overlap_depth = NA, niche_range = NA, cwm = NA, cw_variance = NA,
            cw_skew = NA, cw_kurtosis = NA, sdnnd = NA)
-  if (length(unique(sp)) < 2) return(out)
+  if (length(unique(sp)) < 1) return(out)
 
   # community-wide overlap depth (fixed bandwidth; presence-based, all species)
   out["overlap_depth"] <- community_depth(traits, sp, density_args = list(bw = DEPTH_BW))

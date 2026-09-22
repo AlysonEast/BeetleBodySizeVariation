@@ -69,7 +69,7 @@ community_depth <- function(traits, sp,
   traits <- traits[ok]; sp <- sp[ok]
 
   uniquespp <- sort(unique(sp))
-  if (length(uniquespp) < 2) return(NA)
+  if (length(uniquespp) < 1) return(NA)
 
   bw <- if ("bw" %in% names(density_args)) density_args[["bw"]] else "nrd0"
   n  <- if ("n"  %in% names(density_args)) density_args[["n"]]  else 512

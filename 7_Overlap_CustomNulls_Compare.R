@@ -2,10 +2,13 @@
 # -----------------------------------------------------------------------------
 # Companion to Overlap_CustomNulls_ByYear.R. That script writes one file per
 #   <LEVEL>_by_<POOL>_<aug|noaug>_<YEAR>_<PoolNull|IndividualNull>.csv
-# holding, for each of five metrics, the observed value plus its null CI, SES,
-# and a direction flag:
+# holding, for each metric, the observed value plus its null CI, SES, and a
+# direction flag:
 #   <metric>_obs   <metric>_lower  <metric>_upper  <metric>_ses  <metric>_dir
-# metrics: overlap_norm, overlap_unnorm, niche_range, sdnnd, min_logratio
+# ByYear now writes nine metrics; this script compares four:
+#   overlap_norm, overlap_unnorm, niche_range, overlap_depth
+# (the cw_* moments and sdnnd are written but skipped here; min_logratio was
+#  dropped upstream).
 # plus columns: <focal id> (plotID/siteID), <pool id>, latitude, n_overlap_sp.
 #
 # This script does NOT recompute anything. It reads those outputs and makes
@@ -41,7 +44,7 @@ OUT_DIR <- "./Outputs"
 FIG_DIR <- "./Figures/NullComparisons"
 dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
 
-METRICS <- c("overlap_norm", "overlap_unnorm", "niche_range", "sdnnd", "min_logratio")
+METRICS <- c("overlap_norm", "overlap_unnorm", "niche_range", "overlap_depth")
 NULLS   <- c("PoolNull", "IndividualNull")   # loop the comparisons over each null
 
 # Context held constant in every comparison EXCEPT the axis that comparison varies.
