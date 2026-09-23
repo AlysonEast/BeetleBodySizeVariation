@@ -19,6 +19,13 @@ all_elytra<-subset(all_elytra, imageID!="MLBS_009.S.20180522.jpg")
 all_elytra<-subset(all_elytra, imageID!="MLBS_009.E.20180522.CARABIDS.01.jpg")
 all_elytra<-subset(all_elytra, individualID!="NEON.BET.D07.003475")
 
+spp<-table(subset(all_elytra, yearCollected==2018 | yearCollected==2019)$scientificName_Species) 
+spp<-as.data.frame(spp)
+spp <- spp %>% filter(!grepl("sp\\.", Var1))
+spp <- spp[-1,]
+colnames(spp)<-c("Species","CountInDataset")
+write.csv(spp, "./Outputs/SpeciesList.csv", row.names = FALSE)
+
 #Distribution of Mean Body Size in Carabids####
 ElytraSummary<- all_elytra %>%
   group_by(scientificName_Species) %>%
