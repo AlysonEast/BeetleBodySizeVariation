@@ -30,8 +30,8 @@ setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 #Read in and merge overlap and richness data
 # plot_overlap<-read.csv("./Outputs/plot_by_all_noaug_ByYearAvg_IndividualNull.csv") #use plot_by_all becuase there are no exclusions due to domains with 1 site
 #Read in overlap data
-plot_2018<-read.csv("./Outputs/plot_by_site_aug_2018_PoolNull.csv")
-plot_2019<-read.csv("./Outputs/plot_by_site_aug_2019_PoolNull.csv")
+plot_2018<-read.csv("./Outputs/plot_by_site_2018_PoolNull.csv")
+plot_2019<-read.csv("./Outputs/plot_by_site_2019_PoolNull.csv")
 head(plot_2018)
 plot_2018$Year<-2018
 plot_2019$Year<-2019
@@ -57,18 +57,17 @@ head(plot_abund)
 plotDF<-merge(plotDF, plot_abund, by="Assemblage")
 head(plotDF)
 
+phylo<-read.csv("./Outputs/plot_PhyloDistance.csv")
+plotDF<-merge(plotDF, phylo, by="Assemblage")
+head(plotDF)
+
 #How stable is overlap from year to year
 plotDF2018<-subset(plotDF, Year.x==2018)
 plotDF2019<-subset(plotDF, Year.x==2019)
 pair<-merge(plotDF2018, plotDF2019, by="plotID.x", all=TRUE)
 head(pair)
 
-plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
-abline(a=0, b=1)
-
-plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
-abline(a=0, b=1)
-plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
+plot(pair$n_comm_sp.x~pair$n_comm_sp.y)
 abline(a=0, b=1)
 
 plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
@@ -77,18 +76,20 @@ abline(a=0, b=1)
 plot(pair$overlap_depth_obs.x~pair$overlap_depth_obs.y)
 abline(a=0, b=1)
 
+plot(pair$pd.x~pair$pd.y)
+abline(a=0, b=1)
 
 plotDF$richness<-plotDF$Estimator
 #What overlap values need to be removed?
-plot(plotDF$richness~plotDF$n_overlap_sp)
+plot(plotDF$richness~plotDF$n_comm_sp)
 abline(a=0, b=1)
-plot(plotDF$Observed~plotDF$n_overlap_sp)
+plot(plotDF$Observed~plotDF$n_comm_sp)
 abline(a=0, b=1)
 
-plotDF$diff<-plotDF$Observed-plotDF$n_overlap_sp
+plotDF$diff<-plotDF$Observed-plotDF$n_comm_sp
 hist(plotDF$diff)
 
-plotDF$diffpct<-((plotDF$Estimator-plotDF$n_overlap_sp)/plotDF$Estimator)
+plotDF$diffpct<-((plotDF$Estimator-plotDF$n_comm_sp)/plotDF$Estimator)
 # plotDF$diffpct<-as.numeric(ifelse(plotDF$diffpct<0, paste0(NA), plotDF$diffpct))
 
 table(plotDF$diffpct, useNA = "ifany")
@@ -97,13 +98,8 @@ plotDF$diffdouble<-ifelse(plotDF$diffpct>.5, paste0(1), paste0(0))
 plotDF$diffthird<-ifelse(plotDF$diffpct>(2/3), paste0(1), paste0(0))
 
 
-ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = overlap_unnorm_obs)) +
-  geom_point(alpha=0.5) +
-  geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  scale_colour_gradient(low = "purple", high = "orange")
 
-ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = diffpct, shape = diffdouble)) +
+ggplot(plotDF, aes(x=richness, y=n_comm_sp, colour = diffpct, shape = diffdouble)) +
   geom_point(alpha=0.5, size=3) +
   geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
   geom_abline(intercept = 0, slope = 1) +
@@ -112,7 +108,7 @@ ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = diffpct, shape = diffdou
 table(plotDF$diffdouble)
 
 #Evaluate validity of richness estimates
-ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = completeness, shape = diffdouble)) +
+ggplot(plotDF, aes(x=richness, y=n_comm_sp, colour = completeness, shape = diffdouble)) +
   geom_point(alpha=0.5, size=3) +
   geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
   geom_abline(intercept = 0, slope = 1) +
@@ -127,7 +123,7 @@ table(plotDF$poorRichnessEstimate, plotDF$diffthird)
 table(plotDF$poorRichnessEstimate, plotDF$plotID.x)
 
 
-ggplot(plotDF, aes(x=richness, y=n_overlap_sp, colour = poorRichnessEstimate, shape = diffthird)) +
+ggplot(plotDF, aes(x=richness, y=n_comm_sp, colour = poorRichnessEstimate, shape = diffthird)) +
   geom_point(alpha=0.5, size=3) +
   geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5) +
   geom_abline(intercept = 0, slope = 1) 
@@ -142,11 +138,10 @@ if (EXCLUDE_ISLANDS) plotDF<-plotDF %>%
          !grepl('GUAN', plotDF$plotID.x)) #c("PUUM","LAJA","GUAN"))
 
 plotDF<-subset(plotDF, completeness>=.5)
-plotDF<-subset(plotDF, diffpct<.5 & n_overlap_sp<=2 | 
-                 n_overlap_sp>2 & diffpct<=(2/3))
+plotDF<-subset(plotDF, diffpct<.5 & n_comm_sp<=2 | 
+                 n_comm_sp>2 & diffpct<=(2/3))
 
 dim(preExclusion)
-plotDF<-subset(plotDF, !is.na(overlap_unnorm_obs))
 dim(plotDF)
 dim(preExclusion)[1]-dim(plotDF)[1]
 
@@ -156,7 +151,7 @@ dim(table(plotDF$plotID.x))
 
 symdiff(levels(as.factor(preExclusion$SiteID)),levels(as.factor(plotDF$SiteID)))
 #Evaluate validity of richness estimates
-ggplot(preExclusion, aes(x=richness, y=n_overlap_sp)) +
+ggplot(preExclusion, aes(x=richness, y=n_comm_sp)) +
   geom_point(alpha=0.5, size=2, col="grey") +
   geom_errorbar(aes(xmin = LCL, xmax=UCL), alpha=0.5, col="grey") +
   geom_point(data = plotDF, alpha=0.5, size=2, col="black") +
@@ -175,23 +170,14 @@ plotDF2019<-subset(plotDF, Year.x==2019)
 pair<-merge(plotDF2018, plotDF2019, by="plotID.x", all=TRUE)
 head(pair)
 
-plot(pair$n_overlap_sp.x~pair$n_overlap_sp.y)
-abline(a=0, b=1)
-
-plot(pair$overlap_unnorm_obs.x~pair$overlap_unnorm_obs.y)
-abline(a=0, b=1)
-plot(sqrt(pair$overlap_unnorm_obs.x)~sqrt(pair$overlap_unnorm_obs.y))
+plot(pair$n_comm_sp.x~pair$n_comm_sp.y)
 abline(a=0, b=1)
 
 plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
 abline(a=0, b=1)
 
-plot(plotDF$richness~plotDF$overlap_unnorm_obs)
-plot(plotDF$n_overlap_sp~plotDF$overlap_unnorm_obs)
-
 plot(plotDF$richness~plotDF$overlap_depth_obs)
 
-plot(plotDF$overlap_norm_obs~plotDF$overlap_depth_obs)
 plot(plotDF$niche_range_obs~plotDF$overlap_depth_obs)
 plot(plotDF$overlap_depth_obs~plotDF$niche_range_obs)
 
@@ -203,10 +189,10 @@ ggplot(plotDF, aes(x=niche_range_obs, y=overlap_depth_obs, colour = richness)) +
   xlab("Niche Space") +
   ylab("Average Co-occurance") +
   labs(colour = "Observed \n Richness") +
-  annotate(geom = "text", x = 1.2, y = 3.1, label = "Highest Potential \n Richness", size = 5)+
-  annotate(geom = "text", x = .17, y = .3, label = "Lowest Potential \n Richness", size = 5)+
-  annotate(geom = "text", x = .17, y = 3, label = "Lowest Total \n Partitioning", size = 5)+
-  annotate(geom = "text", x = 1.2, y = .3, label = "Highest Total \n Partitioning", size = 5)+
+  annotate(geom = "text", x = 1.15, y = 2, label = "Highest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .1, y = .15, label = "Lowest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .1, y = 2, label = "Lowest Total \n Partitioning", size = 5)+
+  annotate(geom = "text", x = 1.15, y = .15, label = "Highest Total \n Partitioning", size = 5)+
   theme(legend.position = "inside",
         legend.position.inside = c(0.9, 0.7))
 dev.off()
@@ -217,10 +203,10 @@ ggplot(plotDF, aes(x=niche_range_obs, y=overlap_depth_obs)) +
   xlab("Niche Space") +
   ylab("Average Co-occurance") +
   labs(colour = "Observed \n Richness") +
-  annotate(geom = "text", x = 1.2, y = 3.1, label = "Highest Potential \n Richness", size = 5)+
-  annotate(geom = "text", x = .17, y = .3, label = "Lowest Potential \n Richness", size = 5)+
-  annotate(geom = "text", x = .17, y = 3, label = "Lowest Total \n Partitioning", size = 5)+
-  annotate(geom = "text", x = 1.2, y = .3, label = "Highest Total \n Partitioning", size = 5)
+  annotate(geom = "text", x = 1.15, y = 2, label = "Highest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .1, y = .15, label = "Lowest Potential \n Richness", size = 5)+
+  annotate(geom = "text", x = .1, y = 2, label = "Lowest Total \n Partitioning", size = 5)+
+  annotate(geom = "text", x = 1.15, y = .15, label = "Highest Total \n Partitioning", size = 5)
 dev.off()
 
 #Env Variaibles
@@ -244,11 +230,14 @@ head(plotDF)
 #### Pair plot#
 plotDF$log_richness<-log10(plotDF$richness)
 head(plotDF)
-plotDF$log_rugosity<-log10(plotDF$rugosity_RC)
+plotDF$log_rugosity<-log10(plotDF$rugosity_RC +0.01)
+plotDF$sqrt_rugosity<-sqrt(plotDF$rugosity_RC)
+
 plotDF$log_geodiv<-log10(plotDF$geodiv)
 
-pairs.panels(plotDF[,c("bio_1","Npp","Velocity","rugosity_RC","geodiv","niche_range_obs","overlap_depth_obs","overlap_unnorm_obs","richness")])
-pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","niche_range_obs","overlap_depth_obs","overlap_unnorm_obs","richness","log_richness")])
+pairs.panels(plotDF[,c("bio_1","Npp","Velocity","rugosity_RC","geodiv","niche_range_obs","overlap_depth_obs","pd","mpd","mntd","richness")])
+pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","niche_range_obs","overlap_depth_obs","pd","richness","log_richness")])
+pairs.panels(plotDF[,c("bio_1","Npp","Velocity","sqrt_rugosity","log_geodiv","niche_range_obs","overlap_depth_obs","pd","richness","log_richness")])
 
 ## ============================================================ ##
 ## 1. CONFIG -- edit these, everything downstream is parameterized
@@ -256,6 +245,7 @@ pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","nic
 
 RANGE_COL     <-"niche_range_obs"
 COOCCURANCE_COL     <-"overlap_depth_obs"
+PHYLO_COL <- "mpd"
 RICH_COL   <- "log_richness"
 TMEAN_COL  <- "bio_1" 
 NPP_COL  <- "Npp"       
@@ -271,6 +261,7 @@ STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD unit
 ## ============================================================ ##
 
 dat <- data.frame(
+  siteID = plotDF$siteID,
   plotID = plotDF$plotID,
   tmean  = plotDF[[TMEAN_COL]],
   npp    = plotDF[[NPP_COL]],
@@ -278,13 +269,15 @@ dat <- data.frame(
   geodiv = plotDF[[GEODIV_COL]],
   range      = plotDF[[RANGE_COL]],
   cooccurrence = plotDF[[COOCCURANCE_COL]],
+  phylo = plotDF[[PHYLO_COL]],
   rich   = plotDF[[RICH_COL]]
 )
 
+dat$phylo[is.na(dat$phylo)]<-0
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
 ## Complexity column all 47 sites should be retained -- verify in the printout.
-model_vars <- c("tmean", "npp","geodiv", "cooccurrence", "range", "rich","velocity")
+model_vars <- c("tmean", "npp","geodiv", "cooccurrence", "range", "rich","velocity","phylo")
 cc <- complete.cases(dat[, model_vars])
 
 cat("\n--- complete-case summary ---\n")
@@ -302,527 +295,137 @@ if (STANDARDIZE) {
 head(dat)
 hist(dat$rich)
 
+png("./Figures/SEMs/plotsPairs.png", res = 300, height = 13, width = 13, units = "in")
 pairs.panels(dat[,c(2:ncol(dat))])
-
+dev.off()
 
 ## ============================================================ ##
 ## 3. Candidate Models
 ## ============================================================ ##
-#___________________Env Only___________________
-m_env_direct <- '
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv
-'
-sem_env_direct<-sem(m_env_direct, data = dat, estimator = "MLR")
-lavaanPlot(model = sem_env_direct,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-
-#___________________Env and Range___________________
-m_env_range <- '
-  range ~ r1*tmean + r2*npp + r3*velocity + r4*geodiv
-
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_npp_range := r2*d1
-  ind_velocity_range := r3*d1
-  ind_geodiv_range := r4*d1
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1
-  tot_npp := c2 + r2*d1
-  tot_velocity := c3 + r3*d1
-  tot_geodiv := c4 + r4*d1
-'
-sem_env_range<-sem(m_env_range, data = dat, estimator = "MLR")
-lavaanPlot(model = sem_env_range,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-
-m1_env_range <-  '
-  range ~ r1*tmean + r3*velocity + r4*geodiv
-
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_velocity_range := r3*d1
-  ind_geodiv_range := r4*d1
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1
-  tot_npp := c2
-  tot_velocity := c3 + r3*d1
-  tot_geodiv := c4 + r4*d1
-'
-sem1_env_range<-sem(m1_env_range, data = dat, estimator = "MLR")
-
-m2_env_range <-  '
-  range ~ r1*tmean + r3*velocity
-
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_velocity_range := r3*d1
-
-  # total effects on richness
-  tot_tmean := c1 + r1*d1
-  tot_npp := c2
-  tot_velocity := c3 + r3*d1
-  tot_geodiv := c4
-'
-sem2_env_range<-sem(m2_env_range, data = dat, estimator = "MLR")
-
-m3_env_range <- '
-  range ~ r3*velocity
-
-  rich ~ c2*npp + c3*velocity + c4*geodiv +
-         d1*range
-
-  # indirect paths to richness
-  ind_velocity_range := r3*d1
-
-  # total effects on richness
-  tot_npp := c2
-  tot_velocity := c3 + r3*d1
-  tot_geodiv := c4
-'
-sem3_env_range<-sem(m3_env_range, data = dat, estimator = "MLR")
-
-#___________________Env and Depth___________________
-m_env_depth <- '
-  cooccurrence ~ o1*tmean + o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d2*cooccurrence
-
-  # indirect paths to richness
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + o1*d2
-  tot_npp := c2 +  o2*d2
-  tot_velocity := c3 + o3*d2
-  tot_velocity := c4 + o4*d2
-'
-sem_env_depth<-sem(m_env_depth, data = dat, estimator = "MLR")
-lavaanPlot(model = sem_env_depth,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-
-
-m1_env_depth <- '
-  cooccurrence ~ o1*tmean + o2*npp + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d2*cooccurrence
-
-  # indirect paths to richness
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + o1*d2
-  tot_npp := c2 +  o2*d2
-  tot_velocity := c3
-  tot_geodiv := c4 +  o4*d2
-'
-sem1_env_depth<-sem(m1_env_depth, data = dat, estimator = "MLR")
-lavaanPlot(model = sem1_env_depth,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-
-m2_env_depth <- '
-  cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c2*npp + c3*velocity + c4*geodiv +
-         d2*cooccurrence
-
-  # indirect paths to richness
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_npp := c2 +  o2*d2
-  tot_velocity := c3 + o3*d2
-  tot_geodiv := c4 +  o4*d2
-'
-sem2_env_depth<-sem(m2_env_depth, data = dat, estimator = "MLR")
-
-m3_env_depth <- '
-  cooccurrence ~ o2*npp + o4*geodiv
-            
-  rich ~ c2*npp + c3*velocity + c4*geodiv +
-         d2*cooccurrence
-
-  # indirect paths to richness
-  ind_npp_co := o2*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_npp := c2 +  o2*d2
-  tot_velocity := c3 
-  tot_geodiv := c4 +  o4*d2
-'
-sem3_env_depth<-sem(m3_env_depth, data = dat, estimator = "MLR")
-
-
 #___________________Env Range and Depth___________________
+# m_env_range_depth <- '
+#   phylo ~ p1*tmean + p3*velocity
+# 
+#   range ~ r1*tmean + r2*npp + r3*velocity + r5*phylo
+# 
+#   cooccurrence ~ o2*npp + o3*velocity + o4*geodiv + o5*phylo
+# 
+#   range ~~ cooccurrence
+# 
+#   rich ~ c1*tmean + c3*velocity + c4*geodiv +
+#          d1*range + d2*cooccurrence + d3*phylo
+# 
+#   # indirect paths to richness
+#   ind_temp_phylo := p1*d3
+#   ind_velocity_phylo := p3*d3
+# 
+#   ind_temp_range := r1*d1
+#   ind_npp_range := r2*d1
+#   ind_velocity_range := r3*d1
+#   ind_pylo_range := r5*d1
+# 
+#   ind_npp_co := o2*d2
+#   ind_velocity_co := o3*d2
+#   ind_spatial_co := o4*d2
+#   ind_pylo_co := o5*d2
+# 
+#   ind_temp_phylo_range := p1*r5*d1
+#   ind_temp_phylo_co    := p1*o5*d2
+#   ind_velocity_phylo_range := p3*r5*d1
+#   ind_velocity_phylo_co    := p3*o5*d2
+#   
+#   # total effects on richness
+#   tot_tmean    := c1 + r1*d1 + p1*d3 + p1*r5*d1 + p1*o5*d2
+#   tot_velocity := c3 + r3*d1 + o3*d2 + p3*d3 + p3*r5*d1 + p3*o5*d2
+#   tot_npp := r2*d1 + o2*d2
+#   tot_spatial := c4 + o4*d2
+# '
+
 m_env_range_depth <- '
-  range ~ r1*tmean + r2*npp + r3*velocity + r4*geodiv
-
-  cooccurrence ~ o1*tmean + o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_npp_range := r2*d1
-  ind_velocity_range := r3*d1
-  ind_geodiv_range := r4*d1
-  
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1 + o1*d2
-  tot_npp := c2 + r2*d1 + o2*d2
-  tot_velocity := c3 + r3*d1 + o3*d2
-  tot_geodiv := c4 + r4*d1 + o4*d2
-'
-sem_env_range_depth<-sem(m_env_range_depth, data = dat, estimator = "MLR")
-lavaanPlot(model = sem_env_range_depth,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-summary(sem_env_range_depth)
-
-m1_env_range_depth <- '
-  range ~ r1*tmean + r3*velocity + r4*geodiv
-
-  cooccurrence ~ o1*tmean + o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_velocity_range := r3*d1
-  ind_geodiv_range := r4*d1
-  
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1 + o1*d2
-  tot_npp := c2 + o2*d2
-  tot_velocity := c3 + r3*d1 + o3*d2
-  tot_geodiv := c4 + r4*d1 + o4*d2
-'
-sem1_env_range_depth<-sem(m1_env_range_depth, data = dat, estimator = "MLR")
-
-m2_env_range_depth <- '
-  range ~ r1*tmean + r3*velocity
-
-  cooccurrence ~ o1*tmean + o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_velocity_range := r3*d1
-  
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1 + o1*d2
-  tot_npp := c2 + o2*d2
-  tot_velocity := c3 + r3*d1 + o3*d2
-  tot_geodiv := c4 + o4*d2
-'
-sem2_env_range_depth<-sem(m2_env_range_depth, data = dat, estimator = "MLR")
-summary(sem2_env_range_depth)
-
-m3_env_range_depth <- '
-  range ~ r3*velocity
+  range ~ r1*tmean + r2*npp + r3*velocity
 
   cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
 
-  # indirect paths to richness
-  ind_velocity_range := r3*d1
-  
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_npp := c2 + o2*d2
-  tot_velocity := c3 + r3*d1 + o3*d2
-  tot_geodiv := c4 + o4*d2
-'
-sem3_env_range_depth<-sem(m3_env_range_depth, data = dat, estimator = "MLR")
-summary(sem3_env_range_depth)
+  phylo ~ p1*tmean + p3*velocity + p4*geodiv
 
-m4_env_range_depth <- '
-  range ~ r1*tmean + r3*velocity
+  range ~~ cooccurrence
+  phylo ~~ cooccurrence
+  phylo ~~ range
 
-  cooccurrence ~ o1*tmean + o2*npp + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_temp_range := r1*d1
-  ind_velocity_range := r3*d1
-  
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1 + o1*d2
-  tot_npp := c2 + o2*d2
-  tot_velocity := c3 + r3*d1
-  tot_geodiv := c4 + o4*d2
-'
-sem4_env_range_depth<-sem(m4_env_range_depth, data = dat, estimator = "MLR")
-summary(sem4_env_range_depth)
-
-m5_env_range_depth <- '
-  range ~ r3*velocity
-
-  cooccurrence ~ o2*npp + o4*geodiv
-            
-  rich ~ c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_velocity_range := r3*d1
-  
-  ind_npp_co := o2*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_npp := c2 + o2*d2
-  tot_velocity := c3 + r3*d1
-  tot_geodiv := c4 + o4*d2
-'
-sem5_env_range_depth<-sem(m5_env_range_depth, data = dat, estimator = "MLR")
-summary(sem5_env_range_depth)
-
-
-m6_env_range_depth <- '
-  range ~ r3*velocity
-
-  cooccurrence ~ o2*npp 
-            
-  rich ~ c2*npp + c3*velocity +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_velocity_range := r3*d1
-  
-  ind_npp_co := o2*d2
-  
-  # total effects on richness
-  tot_npp := c2 + o2*d2
-  tot_velocity := c3 + r3*d1
-'
-sem6_env_range_depth<-sem(m6_env_range_depth, data = dat, estimator = "MLR")
-summary(sem6_env_range_depth)
-
-m7_env_range_depth <- '
-  range ~ r1*tmean + r2*npp + r4*geodiv
-
-  cooccurrence ~ o1*tmean + o2*npp + o4*geodiv
-            
-  rich ~ c1*tmean + c2*npp + c4*geodiv +
-         d1*range + d2*cooccurrence
+  rich ~ c1*tmean + c3*velocity + c4*geodiv +
+         d1*range + d2*cooccurrence + d3*phylo
 
   # indirect paths to richness
   ind_temp_range := r1*d1
   ind_npp_range := r2*d1
-  ind_geodiv_range := r4*d1
-  
-  ind_temp_co := o1*d2
-  ind_npp_co := o2*d2
-  ind_geodiv_co := o4*d2
-  
-  # total effects on richness
-  tot_tmean := c1 + r1*d1 + o1*d2
-  tot_npp := c2 + r2*d1 + o2*d2
-  tot_geodiv := c4 + r4*d1 + o4*d2
-'
-sem7_env_range_depth<-sem(m7_env_range_depth, data = dat, estimator = "MLR")
-lavaanPlot(model = sem7_env_range_depth,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-summary(sem7_env_range_depth)
-
-m8_env_range_depth <- '
-  range ~ r2*npp + r3*velocity + r4*geodiv
-
-  cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
-            
-  rich ~ c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence
-
-  # indirect paths to richness
-  ind_npp_range := r2*d1
   ind_velocity_range := r3*d1
-  ind_geodiv_range := r4*d1
-  
+
   ind_npp_co := o2*d2
   ind_velocity_co := o3*d2
-  ind_geodiv_co := o4*d2
+  ind_spatial_co := o4*d2
   
-  # total effects on richness
-  tot_npp := c2 + r2*d1 + o2*d2
-  tot_velocity := c3 + r3*d1 + o3*d2
-  tot_geodiv := c4 + r4*d1 + o4*d2
-'
-sem8_env_range_depth<-sem(m8_env_range_depth, data = dat, estimator = "MLR")
-lavaanPlot(model = sem8_env_range_depth,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-summary(sem8_env_range_depth)
+  ind_temp_phylo := p1*d3
+  ind_velocity_phylo := p3*d3
+  ind_spatial_phylo := p4*d3
 
+
+  # total effects on richness
+  tot_tmean := c1 + r1*d1 + p1*d3
+  tot_npp := r2*d1 + o2*d2
+  tot_velocity := c3 + r3*d1 + o3*d2 + p3*d3
+  tot_spatial := c4 + o4*d2 + p4*d3
+'
+sem_env_range_depth<-sem(m_env_range_depth, 
+                         data = dat, 
+                         estimator = "ML",
+                         se = "bootstrap")
+
+sem_env_range_depth_grouped<-sem(m_env_range_depth, 
+                                 data = dat, 
+                                 estimator = "ML",
+                                 se = "bootstrap",
+                                 cluster = "siteID")
 ## ============================================================ ##
 ## 3. evaluate Models
 ## ============================================================ ##
 
-models <- list(
-  "Full_env_only"              = m_env_direct,
-  "Full_Env_Depth"             = m_env_depth,
-  "Full_Env_Range"             = m_env_range,
-  "Full_Env_Range_Depth"       = m_env_range_depth,
-  "m1_Env_Range"               = m1_env_range,
-  "m2_Env_Range"               = m2_env_range,
-  "m3_Env_Range"               = m3_env_range,
-  "m1_Env_Depth"               = m1_env_depth,
-  "m2_Env_Depth"               = m2_env_depth,
-  "m3_Env_Depth"               = m3_env_depth,
-  "m1_Env_Range_Depth"         = m1_env_range_depth,
-  "m2_Env_Range_Depth"         = m2_env_range_depth,
-  "m3_Env_Range_Depth"         = m3_env_range_depth,
-  "m4_Env_Range_Depth"         = m4_env_range_depth,
-  "m5_Env_Range_Depth"         = m5_env_range_depth,
-  "m6_Env_Range_Depth"         = m6_env_range_depth,
-  "m7_Env_Range_Depth"         = m7_env_range_depth,
-  "m8_Env_Range_Depth"         = m8_env_range_depth
-)
+fitMeasures(sem_env_range_depth, c("chisq","df","pvalue","cfi","tli","rmsea","srmr"))
+fitMeasures(sem_env_range_depth_grouped, c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
 
-fits <- lapply(models, function(spec) sem(spec, data = dat, estimator = "MLR"))
+summary(sem_env_range_depth_grouped)
 
-## fit stats + response set (a guard: 'endog' should be identical for every row)
-get_fit <- function(fit) {
-  m <- fitMeasures(fit, c("npar", "df", "chisq", "pvalue",
-                          "cfi", "rmsea", "aic", "bic"))
-  data.frame(as.list(round(m, 3)),
-             endog = paste(sort(lavNames(fit, "ov.y")), collapse = "+"))
-}
-
-fit_table <- do.call(rbind, lapply(fits, get_fit))
-fit_table$model <- names(models)
-fit_table$dAIC  <- round(fit_table$aic - min(fit_table$aic), 2)
-fit_table$wAIC  <- round(exp(-0.5 * fit_table$dAIC) /
-                           sum(exp(-0.5 * fit_table$dAIC)), 3)
-fit_table <- fit_table[order(fit_table$aic),
-                       c("model", "npar", "df", "chisq", "pvalue",
-                         "cfi", "rmsea", "aic", "dAIC", "wAIC", "endog")]
-cat("\n--- competing-theory path models (AIC valid across all; 'endog' must match) ---\n")
-print(fit_table, row.names = FALSE)
+modindices(sem_env_range_depth, sort. = TRUE, minimum.value = 3.84)
+residuals(sem_env_range_depth, type = "cor")
+lavInspect(sem_env_range_depth, "r2")
 
 ## ============================================================ ##
 ## 5. Targeted nested tests (the two questions that matter)
 ## ============================================================ ##
+summary(sem_env_range_depth_grouped)
 
+AIC(sem_env_range_depth, sem_env_range_depth_grouped)
 ## ============================================================ ##
-## 6. (optional) visualize best/full model
+## 6. visualize best/full model
 ## ============================================================ ##
-library(lavaanPlot)
-
-lavaanPlot(model = fits$`Full_env_only`,
+lavaanPlot(model = sem_env_range_depth,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`m2_Env_Range`,
+lavaanPlot(model = sem_env_range_depth_grouped,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`m2_Env_Depth`,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
-           stars = c("regress"))  # Append significance stars to regressions
 
-lavaanPlot(model = fits$`m2_Env_Range_Depth`,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
-           stars = c("regress"))  # Append significance stars to regressions
-lavaanPlot(model = fits$`m1_Env_Range_Depth`,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
-           stars = c("regress"))  # Append significance stars to regressions
-lavaanPlot(model = fits$`m4_Env_Range_Depth`,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
-           stars = c("regress"))  # Append significance stars to regressions
-
-lavaanPlot(model = fits$`m3_Env_Range_Depth`,
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           sig = 0.05,            # Only highlight significant paths
-           stars = c("regress"))  # Append significance stars to regressions
-
-library(tidySEM)
-lay <- get_layout(
-  "velocity", NA, "tmean", NA, "npp",
-  NA, "range", NA, "cooccurrence", NA,
-  NA, NA, "rich", NA, NA,
-  rows = 3)
 lay <- get_layout(
   "velocity","range", NA,
   "tmean", NA,  "rich",
-  "npp", "cooccurrence", NA,
-  "geodiv", NA, NA,
-  rows = 4)
-
+  NA, "phylo", NA,
+  "npp",NA, NA,
+  "geodiv", "cooccurrence", NA,
+  rows = 5)
+#
 make_sem_graph <- function(model, layout, scale = 5) {
   g <- prepare_graph(model = model)
   # Standardized path coefficients
@@ -830,73 +433,59 @@ make_sem_graph <- function(model, layout, scale = 5) {
   graph_sem(model, layout = layout)
 }
 
-p1 <- make_sem_graph(fits$`Full_env_only`, lay)
-p2 <- make_sem_graph(fits$`m2_Env_Range`, lay)
-p3 <- make_sem_graph(fits$`m2_Env_Depth`, lay)
-p4 <- make_sem_graph(fits$`m4_Env_Range_Depth`, lay)
-
 library(patchwork)
-png("./Figures/SEMs/plotsSEMsLDG.png", res = 300, height = 10, width = 13, units = "in")
-(p1 | p2) /
-  (p3 | p4)
+png("./Figures/SEMs/plotSEMstars.png", res = 300, height = 10, width = 11, units = "in")
+make_sem_graph(sem_env_range_depth_grouped, lay)
 dev.off()
-
-p4b <- make_sem_graph(fits$`m2_Env_Range_Depth`, lay)
-p4c <- make_sem_graph(fits$`m3_Env_Range_Depth`, lay)
-png("./Figures/SEMs/plotsSEMsLDG_EnvRangeDepthEquivelant.png", res = 300, height = 10, width = 13, units = "in")
-(p4 | p4b | p4c)
-dev.off()
-
-
-graph_sem(fits$`Full_env_only`, layout = lay)
-graph_sem(fits$`m1_Env_Range`, layout = lay)
-graph_sem(fits$`m1_Env_Depth`, layout = lay)
-graph_sem(fits$`m1_Env_Range_Depth`, layout = lay)
-
-graph_data <- prepare_graph(model = fits$`m1_Env_Range_Depth`)
-graph_data$edges$linewidth <- abs(as.numeric(graph_data$edges$est)) * 5
-plot(graph_data)
 
 
 library(semPlot)
-par(mfrow=c(2,2))
-semPaths(fits$`Full_env_only`, 
-         what = "std",          # Proportional thickness based on standardized paths
-         layout = "tree",
-         fade = FALSE,
-         # --- FONT & LABEL SIZE CUSTOMIZATION ---
-         edge.color = "black",   # Consistent line color
-         edge.label.cex = 3,  # Enlarges the path coefficient numbers (Default is 1.0)
-         sizeLat = 10,          # Enlarges the text/box size for Latent variables
-         sizeMan = 14,          # Enlarges the text/box size for Manifest/observed variables
-         label.cex = 1.2)       # Globally scales up node text size inside the boxes
-semPaths(fits$`m1_Env_Range`, 
-         what = "std",          # Proportional thickness based on standardized paths
-         layout = "tree",
-         fade = FALSE,
-         # --- FONT & LABEL SIZE CUSTOMIZATION ---
-         edge.color = "black",   # Consistent line color
-         edge.label.cex = 3,  # Enlarges the path coefficient numbers (Default is 1.0)
-         sizeLat = 10,          # Enlarges the text/box size for Latent variables
-         sizeMan = 14,          # Enlarges the text/box size for Manifest/observed variables
-         label.cex = 1.2)       # Globally scales up node text size inside the boxes
-semPaths(fits$`m1_Env_Depth`, 
-         what = "std",          # Proportional thickness based on standardized paths
-         layout = "tree",
-         fade = FALSE,
-         # --- FONT & LABEL SIZE CUSTOMIZATION ---
-         edge.color = "black",   # Consistent line color
-         edge.label.cex = 3,  # Enlarges the path coefficient numbers (Default is 1.0)
-         sizeLat = 10,          # Enlarges the text/box size for Latent variables
-         sizeMan = 14,          # Enlarges the text/box size for Manifest/observed variables
-         label.cex = 1.2)       # Globally scales up node text size inside the boxes
-semPaths(fits$`m1_Env_Range_Depth`, 
-         what = "std",          # Proportional thickness based on standardized paths
-         layout = "tree",
-         fade = FALSE,
-         # --- FONT & LABEL SIZE CUSTOMIZATION ---
-         edge.color = "black",   # Consistent line color
-         edge.label.cex = 3,  # Enlarges the path coefficient numbers (Default is 1.0)
-         sizeLat = 10,          # Enlarges the text/box size for Latent variables
-         sizeMan = 14,          # Enlarges the text/box size for Manifest/observed variables
-         label.cex = 1.2)       # Globally scales up node text size inside the boxes
+
+# Width proportional to effect size
+
+lay <- matrix(
+  c(.7,  0,   # range 
+    0,  1.5,   # cooccurrence 
+    0, -1.5,   # phylo
+    3,  0,      # rich
+    -3,  1.5,   # tmean
+    -3,  0.5,   # npp
+    -3, -0.5,   # velocity
+    -3, -1.5),   # geodiv
+  ncol = 2, byrow = TRUE)
+
+sem_env_range_depth
+
+png("./Figures/SEMs/plotsSEMLDG.png", res = 300, height = 10, width = 13, units = "in")
+semPaths(
+  sem_env_range_depth,
+  layout = lay,
+  what = "std",
+  whatLabels = "std",
+  residuals = TRUE,
+  # edge.color = c("black","grey","darkred"),
+  exoVar = FALSE, exoCov = FALSE,
+  sizeMan = 8,
+  label.cex = 1.1,
+  edge.label.cex = .85,
+  edge.width = 2,
+  fade = TRUE,
+  curve = 2)
+dev.off()
+png("./Figures/SEMs/plotsSEMLDGgrouped.png", res = 300, height = 10, width = 13, units = "in")
+semPaths(
+  sem_env_range_depth_grouped,
+  # layout = lay,
+  what = "std",
+  whatLabels = "std",
+  residuals = TRUE,
+  # edge.color = c("black", "darkred"),
+  exoVar = FALSE, exoCov = FALSE,
+  sizeMan = 8,
+  label.cex = 1.1,
+  edge.label.cex = .85,
+  edge.width = 2,
+  fade = TRUE,
+  curve = 2)
+dev.off()
+
