@@ -138,14 +138,20 @@ if (EXCLUDE_ISLANDS) siteDF <- siteDF %>%
   filter(!siteID.x %in% c("PUUM","LAJA","GUAN"))
 siteDF<-subset(siteDF, completeness>=.5)
 siteDF<-subset(siteDF, diffpct<=(2/3))
-siteDF<-subset(siteDF, !is.na(overlap_depth_obs))
+#siteDF<-subset(siteDF, !is.na(overlap_depth_obs))
 
 dim(preExclusion)
 dim(siteDF)
 dim(preExclusion)[1]-dim(siteDF)[1]
 
+write.csv(siteDF, "./Outputs/finalsiteDF.csv")
+
+
 symdiff(levels(as.factor(preExclusion$siteID.x)),levels(as.factor(siteDF$siteID.x)))
 dim(table(siteDF$siteID.x))
+
+
+
 
 ggplot(preExclusion, aes(x=richness, y=n_comm_sp)) +
   geom_point(alpha=0.5, size=2, col="grey") +
@@ -214,15 +220,30 @@ pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","bio01_sq","niche_range_obs
 siteDF$log_richness<-log10(siteDF$richness)
 siteDF$log_bio01_sq<-log10(siteDF$bio01_sq+.001)
 siteDF$log_bio01_sq
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","pd","mpd","richness","log_richness")])
+siteDF$log_mpd<-sqrt(siteDF$mpd)
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","pd","log_mpd","mpd","richness","log_richness")])
 
+n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
+                        "niche_range_obs","overlap_depth_obs","mpd",
+                        "log_richness")], multivariate_outlier_method="adj")
+n$multivariate_normality
+head(n$multivariate_outliers)
+plot(n)
+
+n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
+                        "niche_range_obs","overlap_depth_obs","mpd",
+                        "richness")], multivariate_outlier_method="adj")
+n$multivariate_normality
+head(n$multivariate_outliers)
+plot(n)
+View(siteDF[n$multivariate_outliers$Observation,])
 ## ============================================================ ##
 ## 1. CONFIG -- edit these, everything downstream is parameterized
 ## ============================================================ ##
 RANGE_COL     <-"niche_range_obs"
 COOCCURANCE_COL     <-"overlap_depth_obs"
 PHYLO_COL <- "mpd"
-RICH_COL   <- "log_richness"
+RICH_COL   <- "richness"
 TMEAN_COL  <- "bio01_mean" 
 NPP_COL  <- "Npp"       
 VELOCITY_COL  <- "Velocity"       
@@ -274,23 +295,22 @@ dev.off()
 ## 3. Candidate Models
 ## ============================================================ ##
 #___________________Env Range and Depth___________________
-m_env_range_depth <- '
-  range ~ r1*tmean + r2*npp + r3*velocity
+Hyp_driven_model <- '
+  range ~ r1*tmean + r3*velocity
 
   cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
 
-  phylo ~ p1*tmean + p3*velocity + p4*geodiv
+  phylo ~ p1*tmean + p2*npp + p3*velocity + p4*geodiv 
 
   range ~~ cooccurrence
   phylo ~~ cooccurrence
   phylo ~~ range
 
-  rich ~ c1*tmean + c3*velocity + c4*geodiv +
+  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
          d1*range + d2*cooccurrence + d3*phylo
 
   # indirect paths to richness
   ind_temp_range := r1*d1
-  ind_npp_range := r2*d1
   ind_velocity_range := r3*d1
 
   ind_npp_co := o2*d2
@@ -298,34 +318,123 @@ m_env_range_depth <- '
   ind_spatial_co := o4*d2
   
   ind_temp_phylo := p1*d3
+  ind_npp_phylo := p2*d3
   ind_velocity_phylo := p3*d3
   ind_spatial_phylo := p4*d3
 
 
   # total effects on richness
   tot_tmean := c1 + r1*d1 + p1*d3
-  tot_npp := r2*d1 + o2*d2
+  tot_npp := c2 + o2*d2 + p2*d3
   tot_velocity := c3 + r3*d1 + o3*d2 + p3*d3
   tot_spatial := c4 + o4*d2 + p4*d3
 '
-sem_env_range_depth<-sem(m_env_range_depth, 
-                         data = dat, 
-                         estimator = "ML",
-                         se = "bootstrap")
+
+Hyp_driven_model_nophylo <- '
+  range ~ r1*tmean + r3*velocity
+
+  cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
+
+  range ~~ cooccurrence
+
+  rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
+         d1*range + d2*cooccurrence
+
+  # indirect paths to richness
+  ind_temp_range := r1*d1
+  ind_velocity_range := r3*d1
+
+  ind_npp_co := o2*d2
+  ind_velocity_co := o3*d2
+  ind_spatial_co := o4*d2
+
+  # total effects on richness
+  tot_tmean := c1 + r1*d1
+  tot_npp := c2 + o2*d2 
+  tot_velocity := c3 + r3*d1 + o3*d2
+  tot_spatial := c4 + o4*d2
+'
+
+sem_Hyp_driven_model_grouped<-sem(Hyp_driven_model, 
+                                 data = dat, 
+                                 estimator = "ML",
+                                 se = "bootstrap",
+                                 cluster = "siteID")
+
+sem_Hyp_driven_model_noPhylo_grouped<-sem(Hyp_driven_model_nophylo, 
+                                  data = dat, 
+                                  estimator = "ML",
+                                  se = "bootstrap",
+                                  cluster = "siteID")
+
+sem_Hyp_driven_model_grouped_exclude<-sem(Hyp_driven_model, 
+                                          data = subset(dat, !siteID=="BARR"), 
+                                          estimator = "ML",
+                                          se = "bootstrap",
+                                          cluster = "siteID")
+
+sem_Hyp_driven_model_noPhylo_grouped_exclude<-sem(Hyp_driven_model_nophylo, 
+                                                  data = subset(dat, !siteID=="BARR"), 
+                                                  estimator = "ML",
+                                                  se = "bootstrap",
+                                                  cluster = "siteID")
 
 ## ============================================================ ##
 ## 3. evaluate Models
 ## ============================================================ ##
-summary(sem_env_range_depth)
+# AIC(sem_Saturated_model_grouped, sem_Saturated_model_no_direct_grouped,
+#     sem_Hyp_driven_model_grouped, sem_Hyp_driven_model_nodirect_grouped)
 
-modindices(sem_env_range_depth, sort. = TRUE, minimum.value = 3.84)
-residuals(sem_env_range_depth, type = "cor")
+fitMeasures(sem_Hyp_driven_model_grouped,
+            c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
+fitMeasures(sem_Hyp_driven_model_grouped_exclude,
+            c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
+
+fitMeasures(sem_Hyp_driven_model_noPhylo_grouped,
+            c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
+fitMeasures(sem_Hyp_driven_model_noPhylo_grouped_exclude,
+            c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
+
+
+modindices(sem_Hyp_driven_model_grouped, sort. = TRUE, minimum.value = 3.84)
+residuals(sem_Hyp_driven_model_grouped, type = "cor")
+
+summary(sem_Hyp_driven_model_grouped)
+summary(sem_Hyp_driven_model_grouped_exclude)
+
+# Write the captured console text to a file
+writeLines(capture.output(summary(sem_Hyp_driven_model_grouped)), con = "site_report.txt")
+writeLines(capture.output(summary(sem_Hyp_driven_model_grouped_exclude)), con = "site_report_excludeBARR.txt")
+
+writeLines(capture.output(summary(sem_Hyp_driven_model_noPhylo_grouped)), con = "site_reportNoPhylo.txt")
+writeLines(capture.output(summary(sem_Hyp_driven_model_noPhylo_grouped_exclude)), con = "site_reportNoPhylo_excludeBARR.txt")
+
 
 ## ============================================================ ##
 ## 6. visualize best/full model
 ## ============================================================ ##
 library(lavaanPlot)
-lavaanPlot(model = sem_env_range_depth,
+
+
+lavaanPlot(model = sem_Hyp_driven_model_grouped,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
+lavaanPlot(model = sem_Hyp_driven_model_grouped_exclude,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
+lavaanPlot(model = sem_Hyp_driven_model_noPhylo_grouped,
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           sig = 0.05,            # Only highlight significant paths
+           stars = c("regress"))  # Append significance stars to regressions
+
+lavaanPlot(model = sem_Hyp_driven_model_noPhylo_grouped_exclude,
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
@@ -340,6 +449,14 @@ lay <- get_layout(
   "geodiv", "cooccurrence", NA,
   rows = 5)
 #
+lay2 <- get_layout(
+  "velocity","range", NA,
+  "tmean", NA,  "rich",
+  NA, "NA", NA,
+  "npp",NA, NA,
+  "geodiv", "cooccurrence", NA,
+  rows = 5)
+#
 make_sem_graph <- function(model, layout, scale = 5) {
   g <- prepare_graph(model = model)
   # Standardized path coefficients
@@ -349,8 +466,13 @@ make_sem_graph <- function(model, layout, scale = 5) {
 
 library(patchwork)
 png("./Figures/SEMs/sitesSEMstars.png", res = 300, height = 10, width = 11, units = "in")
-make_sem_graph(sem_env_range_depth, lay)
+make_sem_graph(sem_Hyp_driven_model_grouped_exclude, lay)
 dev.off()
+
+png("./Figures/SEMs/sitesSEMnoPhylostars.png", res = 300, height = 10, width = 11, units = "in")
+make_sem_graph(sem_Hyp_driven_model_grouped_exclude, lay2)
+dev.off()
+
 
 library(lavaan)
 library(semPlot)
@@ -368,8 +490,8 @@ lay <- matrix(
 
 png("./Figures/SEMs/sitesSEMLDG.png", res = 300, height = 10, width = 13, units = "in")
 semPaths(
-  sem_env_range_depth,
-  layout = lay,
+  sem_Hyp_driven_model_grouped,
+  # layout = lay,
   what = "std",
   whatLabels = "std",
   residuals = TRUE,
