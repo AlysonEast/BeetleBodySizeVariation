@@ -45,7 +45,20 @@ ElytraSummary <- ElytraSummary %>%
   filter(!grepl("sp\\.", scientificName_Species))
 
 table(ElytraSummary$scientificName_Species)
+dim(table(ElytraSummary$scientificName_Species))
 str(ElytraSummary)
+
+png("./Figures/BodySizeQuantification/countOfObs.png", units = "in", width = 6, height = 4, res=300)
+ggplot(data = ElytraSummary, aes(x=n_obs)) +
+  geom_histogram(bins = 110) +
+  geom_vline(xintercept=cutoff) +
+  annotate("text", x = cutoff, y = 200, label = paste0("Cutoff for inclusion: ", cutoff), angle = 90, vjust = 1.3) +
+  theme_pubr() +
+  xlab("Number of Observations per Species") +
+  theme(legend.position="none")
+dev.off()
+table(ifelse(ElytraSummary$n_obs>=2, paste0("more"),paste0("less")))
+table(ifelse(ElytraSummary$n_obs>=50, paste0("more"),paste0("less")))
 
 png("./Figures/BodySizeQuantification/AllBodySizeDist.png", units = "in", width = 6, height = 4, res=300)
 ggarrange(ggplot(data = ElytraSummary, aes(x=mean_dist)) +
@@ -60,6 +73,9 @@ ggarrange(ggplot(data = ElytraSummary, aes(x=mean_dist)) +
             theme(legend.position="none"),
           nrow=1)
 dev.off()
+min(ElytraSummary$mean_dist)
+max(ElytraSummary$mean_dist)
+
 #ITV###
 #What is the shape of distributions?####
 ElytraSummary_n<-subset(ElytraSummary, n_obs>=cutoff)
@@ -467,7 +483,7 @@ var_all_scales$scale<-factor(
   levels = c("Species Level", "Domain Level", "Site Level", "Plot Level"))
 
 dim(var_all_scales)
-var_all_scales <- var_all_scales %>% filter(scientificName_Species %in% list)
+#var_all_scales <- var_all_scales %>% filter(scientificName_Species %in% list)
 dim(var_all_scales)
 
 head(var_all_scales)
@@ -476,6 +492,7 @@ summary<-var_all_scales %>%
   group_by(scale) %>%
   summarise(
     n = n(),
+    n_spp = n_distinct(scientificName_Species),
     mean_cvpct = mean(cv2_pct, na.rm = TRUE),
     lower_ci = t.test(cv2_pct)$conf.int[1],
     upper_ci = t.test(cv2_pct)$conf.int[2]
@@ -484,17 +501,6 @@ summary<-var_all_scales %>%
 
 summary
 write.csv(summary, "./Outputs/CVpctSummary.csv", row.names = FALSE)
-
-library(lme4)
-library(lmerTest)
-library(emmeans)
-mod <- lmer(cv2_pct ~ scale + (1|scientificName_Species),
-            data = var_all_scales)
-
-anova(mod)
-summary(mod)
-emmeans(mod, pairwise ~ scale)
-
 
 png("./Figures/BodySizeQuantification/CV_Nested.png", units = "in", width = 7, height = 6, res=300)
 ggplot(var_all_scales,
@@ -1046,6 +1052,21 @@ ggplot(plot_cummunity_summary, aes(x=latitude, y=min_cm)) +
        caption = "98% (red), Mean (black), 2% (blue)")
 dev.off()
 
+ggplot(plot_cummunity_summary, aes(x=latitude, y=range)) +
+  geom_point(col="grey", aes(x=latitude, y=range)) +
+  geom_smooth(aes(x=latitude, y=range) , method = "lm", col="grey", alpha=0.15)+
+  geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+             aes(x=latitude, y=range)) +
+  geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+              aes(x=latitude, y=range), 
+              method = "lm", col="black") +
+  theme_pubr()#+
+  # labs(title = "Community Weighted Bodysize by Latitude",
+  #      subtitle = "Plot Level",
+  #      x = "Latitude",
+  #      y = "Elytra Length (cm)",
+  #      caption = "98% (red), Mean (black), 2% (blue)")
+
 #No aggrigation
 ggplot(all_elytra_lat, aes(x=latitude, y=cm_elytra_max_length)) +
   geom_point(col="grey") +
@@ -1113,13 +1134,13 @@ ggplot(plot_species_var, aes(x=log10(n), y=log10(cv2_pct))) +
 dev.off()
 
 #Range of Body Size
-ggplot(site_cummunity_summary, aes(x=latitude, y=range)) +
+ggplot(site_cummunity_summary, aes(x=Latitude, y=range)) +
   geom_point(col="grey") +
   geom_smooth(method = "lm", col="grey", alpha=0.15)+
-  geom_point(data=subset(site_cummunity_summary, latitude>=25), 
-             aes(x=latitude, y=range)) +
-  geom_smooth(data=subset(site_cummunity_summary, latitude>=25), 
-              aes(x=latitude, y=range), 
+  geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+             aes(x=Latitude, y=range)) +
+  geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+              aes(x=Latitude, y=range), 
               method = "lm", col="black")+
   theme_pubr()
 
@@ -1214,4 +1235,252 @@ ggplot(plot_cummunity_summary, aes(x=(skew)^2, y=kurtosis)) +
        subtitle = "Plot Level",
        x = "(skew)^2",
        y = "kurtosis")
+
+
+plot1<-ggplot(plot_cummunity_summary, aes(x=latitude, y=min_cm)) +
+    geom_point(col="lightblue") +
+    geom_smooth(method = "lm", col="lightblue", alpha=0.15)+
+    geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+               aes(x=latitude, y=min_cm), col="navy") +
+    geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+                aes(x=latitude, y=min_cm), 
+                method = "lm", col="navy")+
+    geom_point(data = plot_cummunity_summary, aes(x=latitude, y=max_cm), col="#FF9966") +
+    geom_smooth(data = plot_cummunity_summary, aes(x=latitude, y=max_cm),
+                method = "lm", col="#FF9966", alpha=0.15)+
+    geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+               aes(x=latitude, y=max_cm), col="#660000") +
+    geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+                aes(x=latitude, y=max_cm), 
+                method = "lm", col="#660000")+
+    geom_point(col="grey", aes(x=latitude, y=mean_cm)) +
+    geom_smooth(aes(x=latitude, y=mean_cm) , method = "lm", col="grey", alpha=0.15)+
+    geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+               aes(x=latitude, y=mean_cm)) +
+    geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+                aes(x=latitude, y=mean_cm), 
+                method = "lm", col="black") +
+    theme_pubr()+
+    labs(title = "Community Weighted Bodysize",
+         subtitle = "Plot Level",
+         x = "Latitude",
+         y = "Elytra Length (cm)")
+plot2<-ggplot(plot_cummunity_summary, aes(x=latitude, y=range)) +
+    geom_point(col="grey", aes(x=latitude, y=range)) +
+    geom_smooth(aes(x=latitude, y=range) , method = "lm", col="grey", alpha=0.15)+
+    geom_point(data=subset(plot_cummunity_summary, latitude>=25), 
+               aes(x=latitude, y=range)) +
+    geom_smooth(data=subset(plot_cummunity_summary, latitude>=25), 
+                aes(x=latitude, y=range), 
+                method = "lm", col="black") +
+    theme_pubr()+
+    labs(title = "Bodysize Niche Space",
+         subtitle = "Plot Level",
+         x = "Latitude",
+         y = "Range of Elytra Length (cm)")
+plot3<-ggplot(site_cummunity_summary, aes(x=Latitude, y=min_cm)) +
+    geom_point(col="lightblue") +
+    geom_smooth(method = "lm", col="lightblue", alpha=0.15)+
+    geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+               aes(x=Latitude, y=min_cm), col="navy") +
+    geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+                aes(x=Latitude, y=min_cm), 
+                method = "lm", col="navy")+
+    geom_point(data = site_cummunity_summary, aes(x=Latitude, y=max_cm), col="#FF9966") +
+    geom_smooth(data = site_cummunity_summary, aes(x=Latitude, y=max_cm),
+                method = "lm", col="#FF9966", alpha=0.15)+
+    geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+               aes(x=Latitude, y=max_cm), col="#660000") +
+    geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+                aes(x=Latitude, y=max_cm), 
+                method = "lm", col="#660000")+
+    geom_point(col="grey", aes(x=Latitude, y=mean_cm)) +
+    geom_smooth(aes(x=Latitude, y=mean_cm) , method = "lm", col="grey", alpha=0.15)+
+    geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+               aes(x=Latitude, y=mean_cm)) +
+    geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+                aes(x=Latitude, y=mean_cm), 
+                method = "lm", col="black") +
+    theme_pubr()+
+    labs(subtitle = "Site Level",
+         x = "Latitude",
+         y = "Elytra Length (cm)")
+plot4<-ggplot(site_cummunity_summary, aes(x=Latitude, y=range)) +
+    geom_point(col="grey", aes(x=Latitude, y=range)) +
+    geom_smooth(aes(x=Latitude, y=range) , method = "lm", col="grey", alpha=0.15)+
+    geom_point(data=subset(site_cummunity_summary, Latitude>=25), 
+               aes(x=Latitude, y=range)) +
+    geom_smooth(data=subset(site_cummunity_summary, Latitude>=25), 
+                aes(x=Latitude, y=range), 
+                method = "lm", col="black") +
+    theme_pubr() +
+    labs(subtitle = "Site Level",
+         x = "Latitude",
+         y = "Range of Elytra Length (cm)")
+
+legend_plot <- ggplot() +
+  
+  # -------------------------
+# LEFT: Body-size metrics
+# -------------------------
+
+annotate("text", x = 1, y = 7,
+         label = "Body-size \nmetrics",
+         fontface = "bold", hjust = 0) +
+  
+  annotate("text", x = 3.5, y = 7,
+           label = "All Sites",
+           fontface = "bold", hjust = 0.5) +
+  
+  annotate("text", x = 6, y = 7,
+           label = "Continental Sites",
+           fontface = "bold", hjust = 0.5) +
+  
+  # Row labels
+  annotate("text", x = 1, y = 6.5,
+           label = "2nd percentile", hjust = 0) +
+  annotate("text", x = 1, y = 6,
+           label = "Mean", hjust = 0) +
+  annotate("text", x = 1, y = 5.5,
+           label = "98th percentile", hjust = 0) +
+  
+  # 2nd percentile
+  geom_segment(aes(x = 3.15, xend = 3.85, y = 6.5, yend = 6.5),
+               color = "lightblue", linewidth = 1) +
+  geom_point(aes(x = 3.5, y = 6.5),
+             color = "lightblue", size = 3) +
+  
+  geom_segment(aes(x = 5.65, xend = 6.35, y = 6.5, yend = 6.5),
+               color = "navy", linewidth = 1) +
+  geom_point(aes(x = 6, y = 6.5),
+             color = "navy", size = 3) +
+  
+  # Mean
+  geom_segment(aes(x = 3.15, xend = 3.85, y = 6, yend = 6),
+               color = "grey", linewidth = 1) +
+  geom_point(aes(x = 3.5, y = 6),
+             color = "grey", size = 3) +
+  
+  geom_segment(aes(x = 5.65, xend = 6.35, y = 6, yend = 6),
+               color = "black", linewidth = 1) +
+  geom_point(aes(x = 6, y = 6),
+             color = "black", size = 3) +
+  
+  # 98th percentile
+  geom_segment(aes(x = 3.15, xend = 3.85, y = 5.5, yend = 5.5),
+               color = "#FF9966", linewidth = 1) +
+  geom_point(aes(x = 3.5, y = 5.5),
+             color = "#FF9966", size = 3) +
+  
+  geom_segment(aes(x = 5.65, xend = 6.35, y = 5.5, yend = 5.5),
+               color = "#660000", linewidth = 1) +
+  geom_point(aes(x = 6, y = 5.5),
+             color = "#660000", size = 3) +
+  
+  # -------------------------
+# RIGHT: Body-size niche
+# -------------------------
+
+annotate("text", x = 9, y = 7,
+         label = "Body-size \nniche space",
+         fontface = "bold", hjust = 0) +
+  
+  annotate("text", x = 11.5, y = 7,
+           label = "All Sites",
+           fontface = "bold", hjust = 0.5) +
+  
+  annotate("text", x = 14, y = 7,
+           label = "Continental Sites",
+           fontface = "bold", hjust = 0.5) +
+  
+  annotate("text", x = 9, y = 6.5,
+           label = "Range", hjust = 0) +
+  
+  geom_segment(aes(x = 11.15, xend = 11.85, y = 6.5, yend = 6.5),
+               color = "grey", linewidth = 1) +
+  geom_point(aes(x = 11.5, y = 6.5),
+             color = "grey", size = 3) +
+  
+  geom_segment(aes(x = 13.65, xend = 14.35, y = 6.5, yend = 6.5),
+               color = "black", linewidth = 1) +
+  geom_point(aes(x = 14, y = 6.5),
+             color = "black", size = 3) +
+  
+  # CI explanation
+  annotate("text", x = 9, y = 5.5,
+           label = "Shaded bands = 95% confidence intervals",
+           fontface = "italic", hjust = 0) +
+  
+  xlim(0.8, 15.2) +
+  ylim(4.5, 7.5) +
+  theme_void()
+
+plots <- ggarrange(
+  plot1,
+  plot2,
+  plot3,
+  plot4,
+  ncol = 2,
+  nrow = 2
+)
+
+png("./Figures/BodySizeQuantification/CW_range_4x4_latitude.png", units = "in", width = 8, height = 9, res=300)
+ggarrange(
+  plots,
+  legend_plot,
+  ncol = 1,
+  heights = c(1, 0.32))
+dev.off()
+
+m_range_site<-glm(range ~ Latitude, data=site_cummunity_summary, family="gaussian")
+par(mfrow=c(2,2))
+plot(m_range_site)
+summary(m_range_site)
+with(summary(m_range_site), 1 - deviance/null.deviance)
+
+m_range_site_cont<-glm(range ~ Latitude, data=subset(site_cummunity_summary, Latitude>25), family="gaussian")
+par(mfrow=c(2,2))
+plot(m_range_site_cont)
+summary(m_range_site_cont)
+with(summary(m_range_site_cont), 1 - deviance/null.deviance)
+
+
+m_range_plot<-glm(range ~ latitude, data=plot_cummunity_summary, family="gaussian")
+par(mfrow=c(2,2))
+plot(m_range_plot)
+summary(m_range_plot)
+with(summary(m_range_plot), 1 - deviance/null.deviance)
+
+m_range_plot_cont<-glm(range ~ latitude, data=subset(plot_cummunity_summary, latitude>25), family="gaussian")
+par(mfrow=c(2,2))
+plot(m_range_plot_cont)
+summary(m_range_plot_cont)
+with(summary(m_range_plot_cont), 1 - deviance/null.deviance)
+
+
+summary(m_range_plot_cont)
+summary(m_range_site_cont)
+
+#Max sizes
+m_max_site_cont<-glm(max_cm ~ Latitude, data=subset(site_cummunity_summary, Latitude>25), family="gaussian")
+plot(m_max_site_cont)
+summary(m_max_site_cont)
+with(summary(m_max_site_cont), 1 - deviance/null.deviance)
+
+m_max_plot_cont<-glm(max_cm ~ latitude, data=subset(plot_cummunity_summary, latitude>25), family="gaussian")
+plot(m_max_plot_cont)
+summary(m_max_plot_cont)
+with(summary(m_max_plot_cont), 1 - deviance/null.deviance)
+
+#min sizes
+m_min_site_cont<-glm(min_cm ~ Latitude, data=subset(site_cummunity_summary, Latitude>25), family="gaussian")
+plot(m_min_site_cont)
+summary(m_min_site_cont)
+with(summary(m_min_site_cont), 1 - deviance/null.deviance)
+
+m_min_plot_cont<-glm(min_cm ~ latitude, data=subset(plot_cummunity_summary, latitude>25), family="gaussian")
+par(mfrow=c(2,2))
+plot(m_min_plot_cont)
+summary(m_min_plot_cont)
+with(summary(m_min_plot_cont), 1 - deviance/null.deviance)
 
