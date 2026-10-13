@@ -6,14 +6,16 @@
 # draws the nested site/plot density figure (the SpeciesNestedWrappedDensityPlots
 # layout from 2_BodySizeQuantification.R) with compact letter displays.
 #
-# Site test: lmer(length ~ siteID + (1 | plotID)). Plots are the unit of
-#   replication for a site difference, so beetles are not treated as
-#   independent draws from a site. Omnibus test is a likelihood ratio test
-#   against the intercept-only model; pairwise contrasts are Tukey-adjusted
-#   emmeans.
-# Plot test: lm(length ~ plotID), fit separately within each site. Omnibus F
-#   test; pairwise contrasts are Tukey-adjusted emmeans.
-# Letters: groups sharing a letter do not differ at ALPHA.
+# Site test: one-way ANOVA aov(length ~ siteID) on individuals, omnibus F
+#   test, then Tukey HSD between all pairs of sites.
+# Plot test: one-way ANOVA aov(length ~ plotID), fit separately within each
+#   site, omnibus F test, then Tukey HSD between all pairs of plots.
+# Note: the site test treats beetles as independent draws from a site, so
+#   beetles from the same plot are not modeled as clustered.
+# Letters: groups sharing a letter do not differ by Tukey HSD at ALPHA.
+# Section 5c writes a .docx table of the largest site and plot mean
+#   differences (with Tukey significance flags) for the TOP_N_SPP most
+#   abundant species.
 # Omnibus p-values are BH-corrected across species within each test type, and
 #   letters are only drawn for tests that survive the correction (unless
 #   SHOW_NS_LETTERS is TRUE).
@@ -23,10 +25,9 @@ library(dplyr)
 library(ggplot2)
 library(ggpubr)
 library(patchwork)
-library(lme4)
-library(emmeans)
-# multcomp and multcompView must be installed for multcomp::cld(). Not loaded
-# with library() because multcomp attaches MASS, which masks dplyr::select.
+library(flextable)  # docx table in 5c
+library(officer)    # used by flextable::save_as_docx
+# multcompView must be installed for multcompView::multcompLetters4().
 
 #### 0. User defined variables ####
 MIN_N_SITE      <- 20     # min individuals for a site to enter the site test
@@ -35,8 +36,7 @@ ALPHA           <- 0.05
 SHOW_NS_LETTERS <- FALSE  # draw letters even when the omnibus test is n.s. after FDR
 DOMAINS         <- NULL   # e.g. "D07" to restrict; NULL = all domains
 YEARS           <- c(2018, 2019)  # each year is analyzed as its own sample unit
-
-emm_options(lmer.df = "satterthwaite")  # needs lmerTest installed (not loaded)
+TOP_N_SPP       <- 10     # number of most abundant species in the 5c table
 
 setwd("/home/aly/Beetles/BeetleBodySizeVariation")
 fig_dir <- "./Figures/BodySizeQuantification/SpatialTests/"
@@ -92,13 +92,22 @@ species_list <- sort(unique(spp_years$scientificName_Species))  # kept for code 
 length(species_list)
 table(spp_years$yearCollected)
 
-#### 3. Compact letter display helper (used by both the site and plot tests) ####
-get_letters <- function(model, group) {
-  emm <- emmeans(model, specs = group)
-  cl  <- as.data.frame(multcomp::cld(emm, Letters = letters,
-                                     alpha = ALPHA, adjust = "tukey"))
-  data.frame(group  = as.character(cl[[group]]),
-             letter = trimws(cl$.group))
+#### 3. Tukey HSD helpers (used by both the site and plot tests) ####
+# Compact letters from Tukey adjusted p-values, ordered by group mean
+get_letters <- function(model, tk, group) {
+  cl <- multcompView::multcompLetters4(model, tk, threshold = ALPHA)[[group]]$Letters
+  data.frame(group = names(cl), letter = unname(cl))
+}
+
+# Largest pairwise difference between group means and its Tukey adjusted p
+tukey_summary <- function(tk, group) {
+  tt <- tk[[group]]
+  i  <- which.max(abs(tt[, "diff"]))
+  data.frame(max_diff    = abs(tt[i, "diff"]),
+             max_pair    = rownames(tt)[i],
+             max_pair_p  = tt[i, "p adj"],
+             n_pairs     = nrow(tt),
+             n_sig_pairs = sum(tt[, "p adj"] < ALPHA))
 }
 
 #### 4. Run site and plot tests for each species x year ####
@@ -127,15 +136,16 @@ for (i in seq_len(nrow(spp_years))) {
            stat = NA_real_, df = NA_real_, p = NA_real_)
   
   if (length(sp_sites) >= 2) {
-    m1  <- lmer(cm_elytra_max_length ~ siteID + (1 | plotID), data = d_site, REML = FALSE)
-    m0  <- lmer(cm_elytra_max_length ~ 1 + (1 | plotID), data = d_site, REML = FALSE)
-    lrt <- anova(m0, m1)
+    d_site <- d_site %>% mutate(siteID = factor(siteID))
+    m  <- aov(cm_elytra_max_length ~ siteID, data = d_site)
+    a  <- anova(m)
+    tk <- TukeyHSD(m, "siteID", conf.level = 1 - ALPHA)
     
-    site_letters <- get_letters(update(m1, REML = TRUE), "siteID")
     site_res <- site_res %>%
       select(-letter) %>%
-      left_join(site_letters, by = "group") %>%
-      mutate(stat = lrt$Chisq[2], df = lrt$Df[2], p = lrt$`Pr(>Chisq)`[2])
+      left_join(get_letters(m, tk, "siteID"), by = "group") %>%
+      mutate(stat = a$`F value`[1], df = a$Df[1], p = a$`Pr(>F)`[1]) %>%
+      cross_join(tukey_summary(tk, "siteID"))
   }
   results[[length(results) + 1]] <- site_res
   
@@ -148,19 +158,22 @@ for (i in seq_len(nrow(spp_years))) {
     s_plots <- plots_ok %>%
       filter(scientificName_Species == sp, yearCollected == yr, siteID == s) %>%
       pull(plotID)
-    d_s <- sp_dat %>% filter(plotID %in% s_plots)
+    d_s <- sp_dat %>% filter(plotID %in% s_plots) %>% mutate(plotID = factor(plotID))
     
-    m <- lm(cm_elytra_max_length ~ plotID, data = d_s)
-    a <- anova(m)
+    m  <- aov(cm_elytra_max_length ~ plotID, data = d_s)
+    a  <- anova(m)
+    tk <- TukeyHSD(m, "plotID", conf.level = 1 - ALPHA)
     
     plot_res <- d_s %>%
       group_by(siteID, plotID) %>%
       summarise(n       = n(),
                 mean_cm = mean(cm_elytra_max_length),
                 .groups = "drop") %>%
-      mutate(species = sp, year = yr, test = "plot", test_unit = s, group = plotID) %>%
-      left_join(get_letters(m, "plotID"), by = "group") %>%
-      mutate(stat = a$`F value`[1], df = a$Df[1], p = a$`Pr(>F)`[1])
+      mutate(plotID = as.character(plotID),
+             species = sp, year = yr, test = "plot", test_unit = s, group = plotID) %>%
+      left_join(get_letters(m, tk, "plotID"), by = "group") %>%
+      mutate(stat = a$`F value`[1], df = a$Df[1], p = a$`Pr(>F)`[1]) %>%
+      cross_join(tukey_summary(tk, "plotID"))
     
     results[[length(results) + 1]] <- plot_res
   }
@@ -179,7 +192,8 @@ fdr <- results_df %>%
 results_df <- results_df %>%
   left_join(fdr, by = c("test", "species", "year", "test_unit", "p")) %>%
   select(any_of(c("species", "year", "test", "test_unit", "siteID", "plotID", "group", "n",
-                  "n_plots", "mean_cm", "letter", "stat", "df", "p", "p_fdr")))
+                  "n_plots", "mean_cm", "letter", "stat", "df", "p", "p_fdr",
+                  "max_diff", "max_pair", "max_pair_p", "n_pairs", "n_sig_pairs")))
 
 write.csv(results_df,
           paste0("./Outputs/BodySizeSpatialTests_", param_tag, ".csv"),
@@ -333,9 +347,85 @@ spp_class <- unit_consistency %>%
                            TRUE                  ~ "differs some years only"))
 table(spp_class$test, spp_class$class)
 
+#### 5c. Table: site and plot mean differences for the most abundant species ####
+# Abundance = number of measured individuals among species that entered a test
+top_spp <- all_elytra %>%
+  filter(scientificName_Species %in% species_list) %>%
+  count(scientificName_Species, sort = TRUE) %>%
+  slice_head(n = TOP_N_SPP) %>%
+  pull(scientificName_Species)
+
+# One row per Tukey test (results_df has one row per site or plot)
+tukey_tests <- results_df %>%
+  filter(species %in% top_spp, !is.na(p)) %>%
+  distinct(species, year, test, test_unit, max_diff, max_pair, max_pair_p,
+           n_pairs, n_sig_pairs) %>%
+  mutate(flag = case_when(max_pair_p < 0.001 ~ "***",
+                          max_pair_p < 0.01  ~ "**",
+                          max_pair_p < 0.05  ~ "*",
+                          TRUE               ~ ""))
+
+# Site cell: largest difference between site means, one line per year
+site_cells <- tukey_tests %>%
+  filter(test == "site") %>%
+  arrange(species, year) %>%
+  group_by(species) %>%
+  summarise(site_cell = paste0(year, ": ", sprintf("%.3f", max_diff), flag,
+                               collapse = "\n"),
+            .groups = "drop")
+
+# Plot cell: largest difference between plot means within any one site, one
+# line per year, with the number of sites whose largest plot pair differs
+plot_cells <- tukey_tests %>%
+  filter(test == "plot") %>%
+  group_by(species, year) %>%
+  summarise(n_sites     = n(),
+            n_sites_sig = sum(max_pair_p < ALPHA),
+            flag        = flag[which.max(max_diff)],
+            max_site    = test_unit[which.max(max_diff)],
+            max_diff    = max(max_diff),
+            .groups = "drop") %>%
+  arrange(species, year) %>%
+  group_by(species) %>%
+  summarise(plot_cell = paste0(year, ": ", sprintf("%.3f", max_diff), flag,
+                               " (", max_site, "; ", n_sites_sig, "/", n_sites, " sites)",
+                               collapse = "\n"),
+            .groups = "drop")
+
+spp_table <- data.frame(Species = top_spp) %>%
+  left_join(site_cells, by = c("Species" = "species")) %>%
+  left_join(plot_cells, by = c("Species" = "species")) %>%
+  mutate(across(c(site_cell, plot_cell), ~ ifelse(is.na(.x), "not tested", .x))) %>%
+  rename(`Site Means Diff` = site_cell,
+         `Plot Means Diff` = plot_cell)
+spp_table
+
+table_note <- paste0(
+  "Values are the largest difference between group means in elytra length (cm), ",
+  "by year. Tukey HSD adjusted p for that pair: * p < 0.05, ** p < 0.01, *** p < 0.001. ",
+  "Plot Means Diff is the largest difference between plots within one site ",
+  "(site named); k/n sites = sites, of those tested, whose largest plot pair differs. ",
+  "Sites need >= ", MIN_N_SITE, " and plots >= ", MIN_N_PLOT, " individuals to be tested.")
+
+ft <- flextable(spp_table) %>%
+  italic(j = "Species", part = "body") %>%
+  bold(part = "header") %>%
+  add_footer_lines(table_note) %>%
+  fontsize(size = 9, part = "footer") %>%
+  autofit()
+
+write.csv(spp_table,
+          paste0("./Outputs/Top", TOP_N_SPP, "Spp_MeanDiffs_", param_tag, ".csv"),
+          row.names = FALSE)
+save_as_docx(ft, path = paste0("./Outputs/Top", TOP_N_SPP, "Spp_MeanDiffs_", param_tag, ".docx"))
+
 #### 6. Figures (one per species, years overlaid) ####
 tab10 <- c("#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F",
            "#EDC948", "#B07AA1", "#FF9DA7", "#9C755F", "#BAB0AC")
+
+# Year styling: letter colors and mean-line types, one per year in YEARS
+year_cols  <- setNames(c("black", "grey50", "firebrick")[seq_along(YEARS)], YEARS)
+year_lines <- setNames(c("solid", "dashed", "dotted")[seq_along(YEARS)], YEARS)
 
 fmt_p <- function(p) format.pval(p, digits = 2, eps = 0.001)
 
@@ -385,7 +475,7 @@ for (sp in species_list) {
     arrange(year)
   
   site_sub <- if (nrow(site_tests) > 0) {
-    paste(sprintf("%s sites: LRT chi2(%d) = %.2f, p = %s, FDR p = %s",
+    paste(sprintf("%s sites: F(%d) = %.2f, p = %s, FDR p = %s",
                   site_tests$year, as.integer(site_tests$df), site_tests$stat,
                   fmt_p(site_tests$p), fmt_p(site_tests$p_fdr)),
           collapse = "\n")
@@ -476,7 +566,7 @@ for (sp in species_list) {
 }
 
 #### 7. Single figure: one species, one year, letters only ####
-sp <- "Pasimachus elongatus"
+sp <- "Carabus goryi"
 yr <- 2018
 
 sp_dat   <- all_elytra %>% filter(scientificName_Species == sp, yearCollected == yr)
