@@ -1,4 +1,6 @@
 library(ggplot2)
+library(soilDB)
+library(aqp)
 library(sf)
 library(maps)
 library(dplyr)
@@ -32,7 +34,7 @@ names(bio)
 
 BETpts<-st_transform(BETpts, st_crs(bio))
 
-climate <- extract(bio, BETpts)
+climate <- terra::extract(bio, BETpts)
 head(climate)
 colnames(climate)<-substr(colnames(climate),11,20)
 colnames(climate)[1]<-"ID"
@@ -60,8 +62,8 @@ plots_climate <- cbind(BETpts, climate)
 # BIO18 = Precipitation of Warmest Quarter
 # BIO19 = Precipitation of Coldest Quarter
 
-climate_matrix<-as.data.frame(plots_climate[,c("bio_1","bio_2","bio_4","bio_5","bio_6","bio_12","bio_15","bio_16","bio_17","bio_18")])
-climate_matrix$geometry<-NULL
+# climate_matrix<-as.data.frame(plots_climate[,c("bio_1","bio_2","bio_4","bio_5","bio_6","bio_12","bio_15","bio_16","bio_17","bio_18","bio_19")])
+# climate_matrix$geometry<-NULL
 
 climate_matrix<-as.data.frame(plots_climate[,c(44:63)])
 climate_matrix$geometry<-NULL
@@ -81,10 +83,61 @@ summary(clim_pca)
 plot(clim_pca)
 
 loadings(clim_pca)
-loadings(clim_pca)[,1:2]
+loadings(clim_pca)[,1:3]
 
+#plot PCAs
 library("corrplot")
+png("./Figures/PCALoadings.png", height = 5, width = 5, res = 300, units = "in")
 corrplot(clim_pca$loadings, is.corr=FALSE, col.lim=c(-1,1))
+dev.off()
+
+library(tidyr)
+
+# Rename raster layers to match the PCA variables
+names(bio) <- sub(".*_(bio_\\d+)$", "\\1", names(bio))
+
+# Select bioclim columns by name so ID can't sneak in
+climate_matrix <- plots_climate |>
+  st_drop_geometry() |>
+  select(all_of(paste0("bio_", 1:19)))
+
+clim_pca <- princomp(climate_matrix, cor = TRUE)
+
+# Crop to CONUS and coarsen for speed (the PCA is linear, so this is equivalent
+# to averaging the PC scores; drop the aggregate step for full resolution)
+conus <- st_as_sf(maps::map("state", plot = FALSE, fill = TRUE)) |>
+  st_transform(crs(bio))
+bio_us <- crop(bio, vect(conus), mask = TRUE)
+bio_us <- aggregate(bio_us, fact = 4, fun = "mean", na.rm = TRUE)
+
+# Project PCA onto the rasters
+pc_rast <- predict(bio_us, clim_pca, index = 1:3, na.rm = TRUE)
+names(pc_rast) <- c("PC1", "PC2", "PC3")
+
+varexp <- round(100 * clim_pca$sdev^2 / sum(clim_pca$sdev^2), 1)
+
+plot_pc <- function(i) {
+  df <- as.data.frame(pc_rast[[i]], xy = TRUE)
+  names(df)[3] <- "score"
+  lim <- max(abs(df$score), na.rm = TRUE)
+  
+  ggplot() +
+    geom_raster(data = df, aes(x, y, fill = score)) +
+    geom_sf(data = conus, fill = NA, colour = "grey30", linewidth = 0.15) +
+    geom_sf(data = BETpts, size = 0.4, colour = "black") +
+    scale_fill_distiller(palette = "RdBu", limits = c(-lim, lim),
+                         name = paste0("PC", i)) +
+    coord_sf(xlim = c(-125, -66.5), ylim = c(24, 50), expand = FALSE) +
+    ggtitle(paste0("PC", i, " (", varexp[i], "% variance)")) +
+    theme_void() +
+    theme(legend.position = "right")
+}
+
+pc_maps <- ggarrange(plot_pc(1), plot_pc(2), plot_pc(3), ncol = 1)
+pc_maps
+
+ggsave("./Figures/ClimatePCA_Maps.png", pc_maps,
+       width = 7, height = 11, dpi = 300)
 
 pts_pca<-cbind(plots_climate, clim_pca$scores)
 plot(pts_pca, max.plot=100)
@@ -93,6 +146,23 @@ pts_pca_df<-as.data.frame(pts_pca)
 
 write.csv(pts_pca_df[,1:(ncol(pts_pca_df)-1)], "./Outputs/BeetlePlotswEnvData.csv", row.names = FALSE)
 
+# Soil Grid data
+
+soil_ph <- rast("/vsicurl/https://files.isric.org/soilgrids/latest/data/phh2o/phh2o_0-5cm_mean.vrt")
+if (is.na(crs(soil_ph)) || crs(soil_ph) == "") {
+  crs(soil_ph) <- "ESRI:54052"
+}
+plot(soil_ph)
+pts_soil <- st_transform(BETpts, st_crs(soil_ph))
+plot(pts_soil, add=TRUE)
+
+extracted <- terra::extract(soil_ph, pts_soil)
+
+pts_soil$soil_ph_0_5cm <- extracted[[2]] / 10
+
+soilDF<-as.data.frame(pts_soil)
+
+write.csv(soilDF[,c(1:(ncol(soilDF)-1))], "./Outputs/BETplot_Soils.csv", row.names = FALSE)
 
 ## Extract velocity
 sites<-read_sf("../NEON_terrestrialSamplingBoundariesDissolve.shp")
@@ -100,7 +170,7 @@ sites<-read_sf("../NEON_terrestrialSamplingBoundariesDissolve.shp")
 velocity<-rast("/media/aly/Penobscot/Data/doi_10_5061_dryad_b13j1__v20111101/Dryad+Archive+Files/Velocity.tif")
 pts_velocity<-st_transform(BETpts, st_crs(velocity))
 
-velocity_vals<-extract(velocity, pts_velocity)[2]
+velocity_vals<-terra::extract(velocity, pts_velocity)[2]
 str(velocity_vals)
 head(velocity_vals)
 pts_velocity <- cbind(pts_velocity, velocity_vals)
@@ -115,10 +185,10 @@ pts_velocityDF[,c(1:(ncol(pts_velocityDF)-1))]
 write.csv(pts_velocityDF[,c(1:(ncol(pts_velocityDF)-1))], "./Outputs/BeetlePlotswVelocity.csv", row.names = FALSE)
 
 sites<-st_transform(sites, st_crs(velocity))
-velocity_vals<-extract(velocity, sites, fun="mean")#[2]
+velocity_vals<-terra::extract(velocity, sites, fun="mean")#[2]
 str(velocity_vals)
 head(velocity_vals)
-velocity_vals<-extract(velocity, sites, fun="mean")[2]
+velocity_vals<-terra::extract(velocity, sites, fun="mean")[2]
 sites <- cbind(sites, velocity_vals)
 
 sitesDF<-as.data.frame(sites[,c("siteID","Velocity")])
