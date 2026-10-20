@@ -391,6 +391,7 @@ species_var <- all_elytra %>%
     mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
     var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
+    cv_pct = 100 * sd(cm_elytra_max_length, na.rm = TRUE) / mean_cm,
     ID = "Spp",
     Above = "None",
     siteID = "All",
@@ -407,6 +408,7 @@ plot_species_var <- all_elytra %>%
     mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
     var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
+    cv_pct = 100 * sd(cm_elytra_max_length, na.rm = TRUE) / mean_cm,
     Above = unique(siteID),
     siteID = unique(siteID),
     domainID = unique(domainID),
@@ -424,6 +426,7 @@ site_species_var <- all_elytra %>%
     mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
     var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
+    cv_pct = 100 * sd(cm_elytra_max_length, na.rm = TRUE) / mean_cm,
     Above = unique(domainID),
     siteID = unique(siteID),
     domainID = unique(domainID),
@@ -442,6 +445,7 @@ domain_species_var <- all_elytra %>%
     mean_cm = mean(cm_elytra_max_length, na.rm = TRUE),
     var_cm  = var(cm_elytra_max_length, na.rm = TRUE),
     cv2_pct = 100 * var_cm / mean_cm^2,
+    cv_pct = 100 * sd(cm_elytra_max_length, na.rm = TRUE) / mean_cm,
     Above = "Spp",
     siteID = "All",
     domainID = unique(domainID),
@@ -493,9 +497,9 @@ summary<-var_all_scales %>%
   summarise(
     n = n(),
     n_spp = n_distinct(scientificName_Species),
-    mean_cvpct = mean(cv2_pct, na.rm = TRUE),
-    lower_ci = t.test(cv2_pct)$conf.int[1],
-    upper_ci = t.test(cv2_pct)$conf.int[2]
+    mean_cvpct = mean(cv_pct, na.rm = TRUE),
+    lower_ci = t.test(cv_pct)$conf.int[1],
+    upper_ci = t.test(cv_pct)$conf.int[2]
   ) %>%
   ungroup()
 
@@ -504,14 +508,14 @@ write.csv(summary, "./Outputs/CVpctSummary.csv", row.names = FALSE)
 
 png("./Figures/BodySizeQuantification/CV_Nested.png", units = "in", width = 7, height = 6, res=300)
 ggplot(var_all_scales,
-       aes(cv2_pct)) +
+       aes(cv_pct)) +
   theme_pubr() + 
   geom_histogram() +
   geom_vline(data = summary, aes(xintercept = mean_cvpct)) +
   geom_vline(data = summary, aes(xintercept = lower_ci), linetype="dashed") +
   geom_vline(data = summary, aes(xintercept = upper_ci), linetype="dashed") +
-  scale_x_continuous(expand = c(0,0), limits = c(0,3), breaks = c(seq(0,3,0.5))) +
-  xlab("Variance as % of mean² (CV² × 100)") +
+  # scale_x_continuous(expand = c(0,0), limits = c(0,3), breaks = c(seq(0,3,0.5))) +
+  xlab("SD as % of mean (CV × 100)") +
   facet_wrap(.~scale, scale="free_y", ncol=1) +
   theme(legend.position = "None") +
   labs(title = "Variance in bodysize as % of mean across nested spatial scales",
@@ -544,7 +548,7 @@ dev.off()
 #Plots for single species
 ggplot(subset(var_all_scales, scientificName_Species=="Pterostichus lama" | scientificName_Species=="Pterostichus mutus" | 
                 scientificName_Species=="Pterostichus rostratus"),
-       aes(scale, cv2_pct, group = scientificName_Species, col = siteID, shape = domainID)) +
+       aes(scale, cv_pct, group = scientificName_Species, col = siteID, shape = domainID)) +
   theme_pubr() + 
   scale_shape_manual(values=c(16,15,17:25))+
   geom_point(size = 4,
@@ -554,8 +558,8 @@ ggplot(subset(var_all_scales, scientificName_Species=="Pterostichus lama" | scie
                                 "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", "#5E738F", "#D1A33D",
                                 "#8A7C64", "#599861")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  facet_wrap(.~scientificName_Species) +
-  ylab("Variance as % of mean² (CV² × 100)") # +
+  facet_wrap(.~scientificName_Species) #+
+  # ylab("Variance as % of mean² (CV² × 100)") # +
   # theme(legend.position = "None")
 
 sort(table(var_all_scales$scientificName_Species))
