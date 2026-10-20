@@ -256,29 +256,29 @@ if (STANDARDIZE) {
 ## mean-centered: squaring it puts the vertex at the mean temperature, minimizes
 ## collinearity with the linear term, and keeps the marginal slopes below exact.
 ## Only bio_1 gets this -- precip curvature is handled by its log transform.
-if (STANDARDIZE) {
-  dat$tmean_sq <- dat$tmean^2
-} else {
-  dat$tmean_sq <- (dat$tmean - mean(dat$tmean))^2
-}
-cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
-    "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
-
-## ============================================================ ##
-## 2.5 Quadratic pretest: does temp curvature occur INSIDE the data range?
-## ============================================================ ##
-fit_lin  <- lm(rich ~ tmean, data = dat)
-fit_quad <- lm(rich ~ tmean + tmean_sq, data = dat)
-cat("\n--- quadratic temperature pretest (plain lm) ---\n")
-print(anova(fit_lin, fit_quad))                 # F-test on the added quadratic
-r1q <- coef(fit_quad)[["tmean"]]; b2q <- coef(fit_quad)[["tmean_sq"]]
-vertex <- -r1q / (2 * b2q)
-cat(sprintf("curvature = %.3f (%s); vertex at std tmean = %.2f; range = [%.2f, %.2f]\n",
-            b2q, ifelse(b2q < 0, "concave/hump", "convex/U"),
-            vertex, min(dat$tmean), max(dat$tmean)))
-cat(ifelse(vertex >= min(dat$tmean) & vertex <= max(dat$tmean),
-           ">> turnover is inside the data: quadratic supported.\n",
-           ">> vertex outside the data: you sample one limb only -- a monotone fit\n   is more honest; reconsider the quadratic before adding it to the SEM.\n"))
+# if (STANDARDIZE) {
+#   dat$tmean_sq <- dat$tmean^2
+# } else {
+#   dat$tmean_sq <- (dat$tmean - mean(dat$tmean))^2
+# }
+# cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
+#     "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
+# 
+# ## ============================================================ ##
+# ## 2.5 Quadratic pretest: does temp curvature occur INSIDE the data range?
+# ## ============================================================ ##
+# fit_lin  <- lm(rich ~ tmean, data = dat)
+# fit_quad <- lm(rich ~ tmean + tmean_sq, data = dat)
+# cat("\n--- quadratic temperature pretest (plain lm) ---\n")
+# print(anova(fit_lin, fit_quad))                 # F-test on the added quadratic
+# r1q <- coef(fit_quad)[["tmean"]]; b2q <- coef(fit_quad)[["tmean_sq"]]
+# vertex <- -r1q / (2 * b2q)
+# cat(sprintf("curvature = %.3f (%s); vertex at std tmean = %.2f; range = [%.2f, %.2f]\n",
+#             b2q, ifelse(b2q < 0, "concave/hump", "convex/U"),
+#             vertex, min(dat$tmean), max(dat$tmean)))
+# cat(ifelse(vertex >= min(dat$tmean) & vertex <= max(dat$tmean),
+#            ">> turnover is inside the data: quadratic supported.\n",
+#            ">> vertex outside the data: you sample one limb only -- a monotone fit\n   is more honest; reconsider the quadratic before adding it to the SEM.\n"))
 
 ## ============================================================ ##
 ## 3. FULL path model: fit + direct / indirect / total effects on richness
@@ -326,7 +326,7 @@ m1_full <- '
 m1_full <- '
   Range  ~ r1*tmean + r3*npp + r4*geodiv
   Overlap  ~ b1*tmean + b2*ppt + b3*npp + b4*geodiv + b5*Range
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*geodiv + d1*Overlap + d2*Range
+  rich ~ c1*tmean + c2*ppt + c3*npp + c4*geodiv + d1*Overlap + d2*Range
 
   # indirect paths to richness
   ind_tmean_Overlap     := b1*d1
@@ -341,13 +341,6 @@ m1_full <- '
   ind_npp_Range_Overlap   := r3*b5*d1
   ind_geodiv_Range_Overlap   := r4*b5*d1
 
-  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
-  curv_tmean       := q1
-  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
-  slope_tmean_cold := c1 + 2*q1*(-1)
-  slope_tmean_mean := c1
-  slope_tmean_warm := c1 + 2*q1*(1)
-
   # total effects on richness
   tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
   tot_ppt    := c2 + b2*d1
@@ -355,13 +348,13 @@ m1_full <- '
   tot_geodiv := c4 + b4*d1 + r4*d2 + r4*b5*d1
 '
 
-lavaanPlot(model = sem(m1_full, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m1_full, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m1_full, data = dat, estimator = "ML"))
-summary(sem(m1_full, data = dat, estimator = "ML"))
+graph_sem(sem(m1_full, data = dat, estimator = "MLR"))
+summary(sem(m1_full, data = dat, estimator = "MLR"))
 
 ## ============================================================ ##
 ## 4. Candidate models = competing theories of the latitudinal gradient
@@ -375,67 +368,57 @@ summary(sem(m1_full, data = dat, estimator = "ML"))
 ## over-identified (df > 0), so CFI/RMSEA/chisq are informative again -- a
 ## good-fitting reduced model means the omitted direct paths were not needed.
 
-m2 <- ' #Take out NPP
-  Range  ~ r1*tmean + r4*geodiv
-  Overlap  ~ b1*tmean + b2*ppt + b4*geodiv + b5*Range
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*geodiv + d1*Overlap + d2*Range
+m2 <- '
+  Range  ~ r1*tmean + r3*npp + r4*geodiv
+  Overlap  ~ b1*tmean + b2*ppt + b3*npp + b4*geodiv
+  rich ~ c1*tmean + c2*ppt + c3*npp + c4*geodiv + d1*Overlap + d2*Range
 
   # indirect paths to richness
   ind_tmean_Overlap     := b1*d1
   ind_ppt_Overlap       := b2*d1
-  ind_geodiv_Overlap    := b4*d1
-
-  ind_tmean_Range     := r1*d2
-  ind_geodiv_Range  := r4*d2
-  ind_tmean_Range_Overlap := r1*b5*d1
-  ind_geodiv_Range_Overlap   := r4*b5*d1
-
-  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
-  curv_tmean       := q1
-  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
-  slope_tmean_cold := c1 + 2*q1*(-1)
-  slope_tmean_mean := c1
-  slope_tmean_warm := c1 + 2*q1*(1)
-
-  # total effects on richness
-  tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
-  tot_ppt    := c2 + b2*d1
-  tot_geodiv := c4 + b4*d1 + r4*d2 + r4*b5*d1
-'
-lavaanPlot(model = sem(m2, data = dat, estimator = "ML"),
-           coefs = TRUE,          # Display the path coefficients
-           stand = TRUE,          # Standardize the coefficients
-           stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m2, data = dat, estimator = "ML"))
-summary(sem(m2, data = dat, estimator = "ML"))
-
-m3 <- ' #Take out climate
-  Range  ~ r3*npp + r4*geodiv
-  Overlap  ~ b3*npp + b4*geodiv + b5*Range
-  rich ~ c3*npp + c4*geodiv + d1*Overlap + d2*Range
-
-  # indirect paths to richness
   ind_npp_Overlap       := b3*d1
   ind_geodiv_Overlap    := b4*d1
 
+  ind_tmean_Range     := r1*d2
   ind_npp_Range       := r3*d2
-  ind_npp_geodiv  := r4*d2
-  ind_npp_Range_Overlap   := r3*b5*d1
-  ind_npp_geodiv_Overlap   := r4*b5*d1
+  ind_geodiv_Range  := r4*d2
 
   # total effects on richness
-  tot_npp    := c3 + b3*d1 + r3*d2 + r3*b5*d1
-  tot_geodiv := c4 + b4*d1 + r4*d2 + r4*b5*d1
+  tot_tmean  := c1 + b1*d1 + r1*d2 
+  tot_ppt    := c2 + b2*d1
+  tot_npp    := c3 + b3*d1 + r3*d2 
+  tot_geodiv := c4 + b4*d1 + r4*d2 
 '
-lavaanPlot(model = sem(m3, data = dat, estimator = "ML"),
+
+lavaanPlot(model = sem(m2, data = dat, estimator = "MLR"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m2, data = dat, estimator = "MLR"))
+summary(sem(m2, data = dat, estimator = "MLR"))
+
+m3 <- '
+  Range  ~ r1*tmean + r3*npp + r4*geodiv
+  rich ~ c1*tmean + c3*npp + c4*geodiv + d2*Range
+
+  ind_tmean_Range     := r1*d2
+  ind_npp_Range       := r3*d2
+  ind_geodiv_Range  := r4*d2
+
+  # total effects on richness
+  tot_tmean  := c1 + r1*d2 
+  tot_npp    := c3 + r3*d2 
+  tot_geodiv := c4 + r4*d2 
+'
+lavaanPlot(model = sem(m3, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m3, data = dat, estimator = "ML"))
-summary(sem(m3, data = dat, estimator = "ML"))
+graph_sem(sem(m3, data = dat, estimator = "MLR"))
+summary(sem(m3, data = dat, estimator = "MLR"))
 
-AIC(sem(m2, data = dat, estimator = "ML"), sem(m3, data = dat, estimator = "ML"))
+AIC(sem(m2, data = dat, estimator = "MLR"), sem(m3, data = dat, estimator = "MLR"))
 
 m4 <- ' #Take out Overlap out of Clim Model
   Range  ~ r1*tmean + r4*geodiv
@@ -457,14 +440,14 @@ m4 <- ' #Take out Overlap out of Clim Model
   tot_ppt    := c2 
   tot_geodiv := c4 + r4*d2
 '
-lavaanPlot(model = sem(m4, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m4, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m4, data = dat, estimator = "ML"))
-summary(sem(m4, data = dat, estimator = "ML"))
-AIC(sem(m2, data = dat, estimator = "ML"), sem(m4, data = dat, estimator = "ML"))
+graph_sem(sem(m4, data = dat, estimator = "MLR"))
+summary(sem(m4, data = dat, estimator = "MLR"))
+AIC(sem(m2, data = dat, estimator = "MLR"), sem(m4, data = dat, estimator = "MLR"))
 
 m5 <- ' #Take overlap out of NPP modle
   Range  ~ r3*npp + r4*geodiv
@@ -478,14 +461,14 @@ m5 <- ' #Take overlap out of NPP modle
   tot_npp    := c3 + r3*d2
   tot_geodiv := c4 + r4*d2
 '
-lavaanPlot(model = sem(m5, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m5, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m3, data = dat, estimator = "ML"))
-summary(sem(m3, data = dat, estimator = "ML"))
-AIC(sem(m5, data = dat, estimator = "ML"), sem(m4, data = dat, estimator = "ML"))
+graph_sem(sem(m3, data = dat, estimator = "MLR"))
+summary(sem(m3, data = dat, estimator = "MLR"))
+AIC(sem(m5, data = dat, estimator = "MLR"), sem(m4, data = dat, estimator = "MLR"))
 
 m6 <- ' #Take out Overlap and ppt out of Clim Model
   Range  ~ r1*tmean + r4*geodiv
@@ -506,14 +489,14 @@ m6 <- ' #Take out Overlap and ppt out of Clim Model
   tot_tmean  := c1 + r1*d2 
   tot_geodiv := c4 + r4*d2
 '
-lavaanPlot(model = sem(m6, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m6, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m6, data = dat, estimator = "ML"))
-summary(sem(m6, data = dat, estimator = "ML"))
-AIC(sem(m6, data = dat, estimator = "ML"), sem(m4, data = dat, estimator = "ML"))
+graph_sem(sem(m6, data = dat, estimator = "MLR"))
+summary(sem(m6, data = dat, estimator = "MLR"))
+AIC(sem(m6, data = dat, estimator = "MLR"), sem(m4, data = dat, estimator = "MLR"))
 
 
 models <- list(
@@ -526,7 +509,7 @@ models <- list(
   "7_Geo"               = m7_Geo
 )
 
-fits <- lapply(models, function(spec) sem(spec, data = dat, estimator = "ML"))
+fits <- lapply(models, function(spec) sem(spec, data = dat, estimator = "MLR"))
 
 ## fit stats + response set (a guard: 'endog' should be identical for every row)
 get_fit <- function(fit) {
@@ -607,7 +590,7 @@ library(lavaan); library(ggplot2); library(ggpubr); library(dplyr)
 USE_BOOT <- TRUE
 N_BOOT   <- 2000   # bump to 5000 for the final figure
 
-fit3 <- sem(m6, data = dat, estimator = "ML",
+fit3 <- sem(m6, data = dat, estimator = "MLR",
             se = if (USE_BOOT) "bootstrap" else "standard",
             bootstrap = N_BOOT, iseed = 42)
 

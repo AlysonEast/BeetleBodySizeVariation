@@ -198,7 +198,10 @@ plotDF<-merge(plotDF, NPP[,c("Npp","Gpp","plotID")], by="plotID")
 head(plotDF)
 
 #### Pair plot#
-pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","abund","overlap_unnorm_obs","richness")])
+pairs.panels(plotDF[,c("rugosity_RC","height_98","mean_height","canopy_cover","geodiv",
+                       "niche_range_obs","overlap_unnorm_obs","sdnnd_obs","richness")])
+
+pairs.panels(plotDF[,c("bio_1","bio_12","rugosity_RC","Npp","canopy_cover","geodiv","niche_range_obs","abund","overlap_unnorm_obs","richness")])
 plotDF$log_rugosity_RC<-log10((plotDF$rugosity_RC+0.01))
 plotDF$log_abund<-log10(plotDF$abund)
 plotDF$log_overlap_unnorm_obs<-log10(plotDF$overlap_unnorm_obs)
@@ -208,9 +211,12 @@ plotDF$sqrt_richness<-sqrt(plotDF$richness)
 plotDF$log_Npp<-log10(plotDF$Npp)
 plotDF$log_bio_12<-log10(plotDF$bio_12)
 plotDF$log_bio_1<-log10(plotDF$bio_1)
-plotDF$log_comp.1<-log10(plotDF$Comp.1)
-plotDF$log_sdnnd_obs<-log10(plotDF$sdnnd_obs)
-pairs.panels(plotDF[,c("bio_1","log_bio_12","log_rugosity_RC","log_Npp","log_abund","overlap_unnorm_obs","sqrt_richness","log_richness")])
+plotDF$log_geodiv<-log10(plotDF$geodiv)
+pairs.panels(plotDF[,c("bio_1","log_bio_12",
+                       "log_rugosity_RC","log_geodiv", "canopy_cover",
+                       "log_Npp",
+                       "overlap_unnorm_obs",
+                       "sqrt_richness","log_richness")])
 
 pairs.panels(plotDF[,c("bio_1",
                        "bio_12",
@@ -304,17 +310,15 @@ nrow=5, ncol=2)
 ## 1. CONFIG -- edit these, everything downstream is parameterized
 ## ============================================================ ##
 
-Overlap_COL    <- "sqrt_overlap_unnorm_obs" 
+Overlap_COL    <- "overlap_unnorm_obs" 
 Range_COL     <-"niche_range_obs"
 Complexity_COL <- "log_rugosity_RC"
+COVER_COL <- "canopy_cover"
+GEODIV_COL <- "log_geodiv"
 RICH_COL   <- "richness"
 TMEAN_COL  <- "bio_1" # Second Order Mean daily mean temperature of coldest quarter
 PPT_COL    <- "log_bio_12" #Mean monthly precipitation of the driest quarter
-NPP_COL  <- "log_Npp"       
-
-Climate <- "Comp.1"
-Abundance <- "log_abound"
-
+NPP_COL  <- "Npp"       
 
 ## Transforms (applied before standardizing)
 STANDARDIZE    <- TRUE               # z-score all model vars (coeffs in SD units)
@@ -329,6 +333,8 @@ dat <- data.frame(
   ppt    = plotDF[[PPT_COL]],
   npp    = plotDF[[NPP_COL]],
   Complexity = plotDF[[Complexity_COL]],
+  cover = plotDF[[COVER_COL]],
+  geodiv = plotDF[[GEODIV_COL]],
   Overlap    = plotDF[[Overlap_COL]],
   Range      = plotDF[[Range_COL]],
   rich   = plotDF[[RICH_COL]]
@@ -337,7 +343,7 @@ dat <- data.frame(
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
 ## Complexity column all 47 sites should be retained -- verify in the printout.
-model_vars <- c("tmean", "ppt", "npp", "Complexity", "Overlap", "Range", "rich")
+model_vars <- c("tmean", "ppt", "npp", "Complexity", "cover", "geodiv", "Overlap", "Range", "rich")
 cc <- complete.cases(dat[, model_vars])
 
 cat("\n--- complete-case summary ---\n")
@@ -354,18 +360,21 @@ if (STANDARDIZE) {
 }
 head(dat)
 hist(dat$rich)
+
+pairs.panels(dat[,c(2:ncol(dat))])
+
 ## quadratic temperature term. Built AFTER standardizing, so tmean is already
 ## mean-centered: squaring it puts the vertex at the mean temperature, minimizes
 ## collinearity with the linear term, and keeps the marginal slopes below exact.
 ## Only bio_1 gets this -- precip curvature is handled by its log transform.
-if (STANDARDIZE) {
-  dat$tmean_sq <- dat$tmean^2
-} else {
-  dat$tmean_sq <- (dat$tmean - mean(dat$tmean))^2
-}
-cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
-    "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
-dat$RangeXOverlap <- dat$Range * dat$Overlap
+# if (STANDARDIZE) {
+#   dat$tmean_sq <- dat$tmean^2
+# } else {
+#   dat$tmean_sq <- (dat$tmean - mean(dat$tmean))^2
+# }
+# cat("cor(tmean, tmean_sq) =", round(cor(dat$tmean, dat$tmean_sq), 3),
+#     "  (large |r| => temp is skewed; consider poly(tmean,2))\n")
+# dat$RangeXOverlap <- dat$Range * dat$Overlap
 
 ## ============================================================ ##
 ## 3. FULL path model: fit + direct / indirect / total effects on richness
@@ -412,142 +421,139 @@ dat$RangeXOverlap <- dat$Range * dat$Overlap
 
 
 m1_full <- '
-  Range  ~ r1*tmean + r3*npp + r4*Complexity
-  Overlap  ~ b1*tmean + b2*ppt + b3*npp + b4*Complexity + b5*Range
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*Complexity + d1*Overlap + d2*Range
+  Range ~ r1*tmean + r3*npp + r4*Complexity + r5*geodiv + r6*cover
+
+  Overlap ~ b1*tmean + b2*ppt + b3*npp + b4*Complexity +
+            b5*Range + b6*geodiv + b7*cover
+
+  rich ~ c1*tmean + c2*ppt + c3*npp + c4*Complexity +
+         c5*geodiv + c6*cover + d1*Overlap + d2*Range
 
   # indirect paths to richness
-  ind_tmean_Overlap     := b1*d1
-  ind_ppt_Overlap       := b2*d1
-  ind_npp_Overlap       := b3*d1
-  ind_Complexity_Overlap    := b4*d1
+  ind_tmean_Overlap := b1*d1
+  ind_ppt_Overlap := b2*d1
+  ind_npp_Overlap := b3*d1
+  ind_Complexity_Overlap := b4*d1
+  ind_geodiv_Overlap := b6*d1
+  ind_cover_Overlap := b7*d1
 
-  ind_tmean_Range     := r1*d2
-  ind_npp_Range       := r3*d2
-  ind_Complexity_Range  := r4*d2
+  ind_tmean_Range := r1*d2
+  ind_npp_Range := r3*d2
+  ind_Complexity_Range := r4*d2
+  ind_geodiv_Range := r5*d2
+  ind_cover_Range := r6*d2
+
   ind_tmean_Range_Overlap := r1*b5*d1
-  ind_npp_Range_Overlap   := r3*b5*d1
-  ind_Complexity_Range_Overlap   := r4*b5*d1
-
-  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
-  curv_tmean       := q1
-  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
-  slope_tmean_cold := c1 + 2*q1*(-1)
-  slope_tmean_mean := c1
-  slope_tmean_warm := c1 + 2*q1*(1)
+  ind_npp_Range_Overlap := r3*b5*d1
+  ind_Complexity_Range_Overlap := r4*b5*d1
+  ind_geodiv_Range_Overlap := r5*b5*d1
+  ind_cover_Range_Overlap := r6*b5*d1
 
   # total effects on richness
-  tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
-  tot_ppt    := c2 + b2*d1
-  tot_npp    := c3 + b3*d1 + r3*d2 + r3*b5*d1
+  tot_tmean := c1 + b1*d1 + r1*d2 + r1*b5*d1
+  tot_ppt := c2 + b2*d1
+  tot_npp := c3 + b3*d1 + r3*d2 + r3*b5*d1
   tot_Complexity := c4 + b4*d1 + r4*d2 + r4*b5*d1
+  tot_geodiv := c5 + b6*d1 + r5*d2 + r5*b5*d1
+  tot_cover := c6 + b7*d1 + r6*d2 + r6*b5*d1
 '
-# 
-# m1_int <- '
-#   # Range no longer predicts Overlap (dropped the b5 path)
-#   Range   ~ r1*tmean + r3*npp + r4*Complexity
-#   Overlap ~ b1*tmean + b2*ppt + b3*npp + b4*Complexity
-#   rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c3*npp + c4*Complexity +
-#          d1*Overlap + d2*Range + d3*RangeXOverlap
-# 
-#   # two mediators now covary rather than being causally ordered
-#   # (lavaan estimates this by default for two endogenous vars; explicit here)
-#   Range ~~ Overlap
-# 
-#   # the interaction itself -- conditional slopes are the actual test
-#   slope_Overlap_loRange   := d1 + d3*(-1)
-#   slope_Overlap_meanRange := d1
-#   slope_Overlap_hiRange   := d1 + d3*(1)
-#   slope_Range_loOverlap   := d2 + d3*(-1)
-#   slope_Range_meanOverlap := d2
-#   slope_Range_hiOverlap   := d2 + d3*(1)
-# 
-#   # indirect paths (evaluated at the mean of the OTHER mediator)
-#   ind_tmean_Overlap      := b1*d1
-#   ind_ppt_Overlap        := b2*d1
-#   ind_npp_Overlap        := b3*d1
-#   ind_Complexity_Overlap := b4*d1
-#   ind_tmean_Range        := r1*d2
-#   ind_npp_Range          := r3*d2
-#   ind_Complexity_Range   := r4*d2
-# 
-#   # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
-#   curv_tmean       := q1
-#   slope_tmean_cold := c1 + 2*q1*(-1)
-#   slope_tmean_mean := c1
-#   slope_tmean_warm := c1 + 2*q1*(1)
-# 
-#   # total effects on richness (at the mean of the mediators)
-#   tot_tmean      := c1 + b1*d1 + r1*d2
-#   tot_ppt        := c2 + b2*d1
-#   tot_npp        := c3 + b3*d1 + r3*d2
-#   tot_Complexity := c4 + b4*d1 + r4*d2
-# '
-# 
-# lavaanPlot(model = sem(m1_int, data = dat, estimator = "ML"),
-#            coefs = TRUE,          # Display the path coefficients
-#            stand = TRUE,          # Standardize the coefficients
-#            sig = 0.05,            # Only highlight significant paths
-#            stars = c("regress"))  # Append significance stars to regressions
-# graph_sem(sem(m1_int, data = dat, estimator = "ML"))
 
-lavaanPlot(model = sem(m1_full, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m1_full, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m1_full, data = dat, estimator = "ML"))
-
+graph_sem(sem(m1_full, data = dat, estimator = "MLR"))
+summary(sem(m1_full, data = dat, estimator = "MLR"))
 ## ============================================================ ##
 ## 4. Candidate models = competing theories of the latitudinal gradient
 ## ============================================================ ##
-## SHARED BACKBONE (identical in every model, so all candidates share the same
-## six variables and N -> AIC/BIC valid across the WHOLE set):
-##   npp ~ tmean + ppt            climate drives productivity (structural)
-##   Overlap ~ tmean+ppt+npp+Complexity   environment shapes trait space
-## Models differ ONLY in the RICHNESS equation: which direct-to-richness paths
-## are free vs fixed to zero. Each choice IS a theory. The reduced models are
-## over-identified (df > 0), so CFI/RMSEA/chisq are informative again -- a
-## good-fitting reduced model means the omitted direct paths were not needed.
 
-m2 <- ' #Take out NPP
-  Range  ~ r1*tmean + r4*Complexity
-  Overlap  ~ b1*tmean + b2*ppt + b4*Complexity + b5*Range
-  rich ~ c1*tmean + q1*tmean_sq + c2*ppt + c4*Complexity + d1*Overlap + d2*Range
+
+m2 <- '
+  Range ~ r3*npp + r4*Complexity + r5*geodiv + r6*cover
+
+  Overlap ~ b3*npp + b4*Complexity +
+            b5*Range + b6*geodiv + b7*cover
+
+  rich ~ c3*npp + c4*Complexity +
+         c5*geodiv + c6*cover + d1*Overlap + d2*Range
 
   # indirect paths to richness
-  ind_tmean_Overlap     := b1*d1
-  ind_ppt_Overlap       := b2*d1
-  ind_Complexity_Overlap    := b4*d1
+  ind_npp_Overlap := b3*d1
+  ind_Complexity_Overlap := b4*d1
+  ind_geodiv_Overlap := b6*d1
+  ind_cover_Overlap := b7*d1
 
-  ind_tmean_Range     := r1*d2
-  ind_Complexity_Range  := r4*d2
-  ind_tmean_Range_Overlap := r1*b5*d1
-  ind_Complexity_Range_Overlap   := r4*b5*d1
+  ind_npp_Range := r3*d2
+  ind_Complexity_Range := r4*d2
+  ind_geodiv_Range := r5*d2
+  ind_cover_Range := r6*d2
 
-  # temperature curvature -- the LDG test (expect q1 < 0: thermal optimum)
-  curv_tmean       := q1
-  # marginal dRich/dTmean at cold / mean / warm sites (std temp = -1, 0, +1)
-  slope_tmean_cold := c1 + 2*q1*(-1)
-  slope_tmean_mean := c1
-  slope_tmean_warm := c1 + 2*q1*(1)
+  ind_npp_Range_Overlap := r3*b5*d1
+  ind_Complexity_Range_Overlap := r4*b5*d1
+  ind_geodiv_Range_Overlap := r5*b5*d1
+  ind_cover_Range_Overlap := r6*b5*d1
 
   # total effects on richness
-  tot_tmean  := c1 + b1*d1 + r1*d2 + r1*b5*d1
-  tot_ppt    := c2 + b2*d1
+  tot_npp := c3 + b3*d1 + r3*d2 + r3*b5*d1
   tot_Complexity := c4 + b4*d1 + r4*d2 + r4*b5*d1
+  tot_geodiv := c5 + b6*d1 + r5*d2 + r5*b5*d1
+  tot_cover := c6 + b7*d1 + r6*d2 + r6*b5*d1
 '
-lavaanPlot(model = sem(m2, data = dat, estimator = "ML"),
+
+lavaanPlot(model = sem(m2, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m2, data = dat, estimator = "ML"))
-summary(sem(m2, data = dat, estimator = "ML"), fit.measures=TRUE)
-m<-sem(m2, data = dat, estimator = "ML")
+graph_sem(sem(m2, data = dat, estimator = "MLR"))
+summary(sem(m2, data = dat, estimator = "MLR"), fit.measures=TRUE)
+m<-sem(m2, data = dat, estimator = "MLR")
 summary(m, fit.measures=TRUE)
 
+lavInspect(m, "converged")
+resid(m, type = "normalized")
 
 fitMeasures(m, c("chisq", "df", "pvalue", "rmsea", "cfi", "tli", "srmr"))
+
+m3 <- '
+  Range ~ r3*npp + r4*Complexity + r5*geodiv + r6*cover
+
+  Overlap ~ b3*npp + b4*Complexity +
+            b6*geodiv + b7*cover
+
+  rich ~ c3*npp + c4*Complexity +
+         c5*geodiv + c6*cover + d1*Overlap + d2*Range
+
+  # indirect paths to richness
+  ind_npp_Overlap := b3*d1
+  ind_Complexity_Overlap := b4*d1
+  ind_geodiv_Overlap := b6*d1
+  ind_cover_Overlap := b7*d1
+
+  ind_npp_Range := r3*d2
+  ind_Complexity_Range := r4*d2
+  ind_geodiv_Range := r5*d2
+  ind_cover_Range := r6*d2
+
+  # total effects on richness
+  tot_npp := c3 + b3*d1 + r3*d2 
+  tot_Complexity := c4 + b4*d1 + r4*d2
+  tot_geodiv := c5 + b6*d1 + r5*d2 
+  tot_cover := c6 + b7*d1 + r6*d2
+'
+
+lavaanPlot(model = sem(m3, data = dat, estimator = "MLR"),
+           coefs = TRUE,          # Display the path coefficients
+           stand = TRUE,          # Standardize the coefficients
+           stars = c("regress"))  # Append significance stars to regressions
+graph_sem(sem(m3, data = dat, estimator = "MLR"))
+summary(sem(m3, data = dat, estimator = "MLR"), fit.measures=TRUE)
+m<-sem(m2, data = dat, estimator = "MLR")
+summary(m, fit.measures=TRUE)
+
+lavInspect(m, "converged")
+resid(m, type = "normalized")
 
 m3 <- ' #Take out climate
   Range  ~ r3*npp + r4*Complexity
@@ -567,14 +573,14 @@ m3 <- ' #Take out climate
   tot_npp    := c3 + b3*d1 + r3*d2 + r3*b5*d1
   tot_Complexity := c4 + b4*d1 + r4*d2 + r4*b5*d1
 '
-lavaanPlot(model = sem(m3, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m3, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m3, data = dat, estimator = "ML"))
+graph_sem(sem(m3, data = dat, estimator = "MLR"))
 
-AIC(sem(m2, data = dat, estimator = "ML"), sem(m3, data = dat, estimator = "ML"))
+AIC(sem(m2, data = dat, estimator = "MLR"), sem(m3, data = dat, estimator = "MLR"))
 
 m4 <-  ' #Take out range to overlap
   Range  ~ r1*tmean + r4*Complexity
@@ -602,14 +608,14 @@ m4 <-  ' #Take out range to overlap
   tot_Complexity := c4 + b4*d1 + r4*d2
 '
 
-lavaanPlot(model = sem(m4, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m4, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m4, data = dat, estimator = "ML"))
+graph_sem(sem(m4, data = dat, estimator = "MLR"))
 
-AIC(sem(m4, data = dat, estimator = "ML"), sem(m2, data = dat, estimator = "ML"))
+AIC(sem(m4, data = dat, estimator = "MLR"), sem(m2, data = dat, estimator = "MLR"))
 
 m5 <- ' #Take out NPP & Swap direction
   Overlap  ~ b1*tmean + b2*ppt + b4*Complexity 
@@ -640,14 +646,14 @@ m5 <- ' #Take out NPP & Swap direction
   tot_ppt    := c2 + b2*d1
   tot_Complexity := c4 + b4*d1 + r4*d2 + b4*r4*d1
 '
-lavaanPlot(model = sem(m5, data = dat, estimator = "ML"),
+lavaanPlot(model = sem(m5, data = dat, estimator = "MLR"),
            coefs = TRUE,          # Display the path coefficients
            stand = TRUE,          # Standardize the coefficients
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
-graph_sem(sem(m5, data = dat, estimator = "ML"))
+graph_sem(sem(m5, data = dat, estimator = "MLR"))
 
-AIC(sem(m5, data = dat, estimator = "ML"), sem(m2, data = dat, estimator = "ML"))
+AIC(sem(m5, data = dat, estimator = "MLR"), sem(m2, data = dat, estimator = "MLR"))
 
 
 models <- list(
@@ -661,7 +667,7 @@ models <- list(
   "8_NPPComplexity_NoOverlap"               = m8_NPPComplexity_NoOverlap
 )
 
-fits <- lapply(models, function(spec) sem(spec, data = dat, estimator = "ML"))
+fits <- lapply(models, function(spec) sem(spec, data = dat, estimator = "MLR"))
 
 ## fit stats + response set (a guard: 'endog' should be identical for every row)
 get_fit <- function(fit) {
@@ -775,7 +781,7 @@ lavaanPlot(model = fits$`7_Geo`,
 # X. Effect decomposition for top model (m2): direct / indirect / total
 # =====================================================================
 # Parameters ----------------------------------------------------------
-m<-sem(m2, data = dat, estimator = "ML")
+m<-sem(m2, data = dat, estimator = "MLR")
 
 FIT      <- m                 # point at your fitted sem() object for m2
 STD      <- TRUE                   # TRUE = standardized (est.std); FALSE = raw
@@ -898,7 +904,7 @@ library(lavaan); library(ggplot2); library(ggpubr); library(dplyr)
 USE_BOOT <- TRUE
 N_BOOT   <- 2000   # bump to 5000 for the final figure
 
-fit_m2 <- sem(m2, data = dat, estimator = "ML",
+fit_m2 <- sem(m2, data = dat, estimator = "MLR",
               se = if (USE_BOOT) "bootstrap" else "standard",
               bootstrap = N_BOOT, iseed = 42)
 
