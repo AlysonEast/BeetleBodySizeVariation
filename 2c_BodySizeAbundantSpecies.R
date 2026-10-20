@@ -102,6 +102,8 @@ head(ind)
 env  <- read.csv("./Outputs/BeetlePlotswEnvData.csv")
 struc <- read.csv("./Outputs/BETplot_Rugosity.csv")
 NPP  <- read.csv("../NEON_MODIS_NPP_2018_2019.csv")
+soil <- read.csv("./Outputs/BETplot_Soils.csv")
+
 
 plot_env <- ind %>%
   distinct(siteID, plotID) %>%
@@ -113,10 +115,14 @@ plot_env <- ind %>%
               transmute(plotID, Comp.1 = Comp.1), by = "plotID") %>%
   left_join(env %>% distinct(plotID, .keep_all = TRUE) %>%
               transmute(plotID, Comp.2 = Comp.2), by = "plotID") %>%
+  left_join(env %>% distinct(plotID, .keep_all = TRUE) %>%
+              transmute(plotID, Comp.3 = Comp.3), by = "plotID") %>%
+  # left_join(soil %>% distinct(plotID, .keep_all = TRUE) %>%
+  #             transmute(plotID, soil_ph_0_5cm = phh2o), by = "plotID") %>%
   left_join(NPP %>% distinct(plotID, .keep_all = TRUE) %>%
               transmute(plotID, npp = Npp), by = "plotID") %>%
   left_join(struc %>% distinct(plotID, .keep_all = TRUE) %>%
-              transmute(plotID, rug = rugosity_RC), by = "plotID")%>%
+              transmute(plotID, rug = rugosity_RC), by = "plotID") %>%
   left_join(struc %>% distinct(plotID, .keep_all = TRUE) %>%
               transmute(plotID, geodiv = geodiv), by = "plotID")
 
@@ -237,32 +243,47 @@ library(patchwork)
 library(flextable)
 library(tidyr)
 library(svglite)
+library(psych)
 
 N_TOP_SPECIES <- 10
-MODEL_TERMS   <- c("Comp.1", "Comp.2", "geodiv", "rug", "rich",
-                   "nn_dist", "nn_diff", "nn_size_diff")
+MODEL_TERMS   <- c("Comp.1", "Comp.2", "Comp.3", "geodiv", "rug", #"soil_ph_0_5cm",
+                   "rich", "nn_dist", "nn_diff", "nn_size_diff")
 RANDOM_EFFECTS <- c(between = "(1 | year)",
                     within  = "(1 | siteID) + (1 | year)")
 MODEL_LABELS   <- c(between = "Across sites", within = "Within sites")
 
+
 pairs.panels(dat_full[,MODEL_TERMS])
-dat_full$rug<-log10(dat_full$rug)
-dat_full$geodiv<-log10(dat_full$geodiv)
-dat_full$rich<-log10(dat_full$rich)
+dat_full$rug<-log10(dat_full$rug + 0.01)
+dat_full$geodiv<-log10(dat_full$geodiv + 0.01)
+dat_full$rich<-log10(dat_full$rich + 0.01)
 pairs.panels(dat_full[,MODEL_TERMS])
+
+spp<-names(sort(table(dat_full$species), decreasing = TRUE)[1:N_TOP_SPECIES])
+pairs.panels(subset(dat_full, species==spp[1])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[2])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[3])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[4])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[5])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[6])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[7])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[8])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[9])[,MODEL_TERMS])
+pairs.panels(subset(dat_full, species==spp[10])[,MODEL_TERMS])
 
 # Display labels and predictor groups, in table/figure order
 term_info <- data.frame(
-  term  = c("(Intercept)", "Comp.1", "Comp.2", "geodiv", "rug", "rich",
-            "nn_dist", "nn_diff", "nn_dist:nn_diff", "nn_size_diff"),
-  label = c("Intercept", "Climate PC1", "Climate PC2", "Log 10 Geodiversity",
-            "Log 10 Canopy rugosity", "Log 10 Species richness",
+  term  = c("(Intercept)", "Comp.1", "Comp.2", "Comp.3", "geodiv", "rug", #"soil_ph_0_5cm",
+            "rich", "nn_dist", "nn_diff", "nn_diff:nn_size_diff", "nn_size_diff"),
+  label = c("Intercept", "Climate PC1", "Climate PC2", "Climate PC3", "Log 10 Geodiversity",
+            "Log 10 Canopy rugosity", #"Soil pH", 
+            "Log 10 Species richness",
             "Phylo. distance to nearest relative",
             "Size difference from nearest relative",
             "Phylo. distance x size difference",
             "Size difference from nearest-sized species"),
-  group = c("", "Climate", "Climate", "Habitat", "Habitat", "Competition",
-            "Competition", "Competition", "Competition", "Competition"))
+  group = c("", "Environment", "Environment", "Environment", "Environment", "Environment", #"Environment",
+            "Competition", "Competition", "Competition", "Competition", "Competition"))
 
 TAB_COLS <- c("#4E79A7", "#F28E2B", "#E15759")   # Tableau 10
 
@@ -443,8 +464,8 @@ for (sp in top_spp) {
 #### 6c. Combined outputs ####
 fixed_df <- bind_rows(fixed_all) %>% left_join(term_info, by = "term")
 fit_df   <- bind_rows(fit_all)
-# write.csv(fixed_df, paste0("./Outputs/IntraspecificShift_TopSpp_Fixed_", param_tag, ".csv"), row.names = FALSE)
-# write.csv(fit_df,   paste0("./Outputs/IntraspecificShift_TopSpp_Fit_", param_tag, ".csv"), row.names = FALSE)
+write.csv(fixed_df, paste0("./Outputs/IntraspecificShift_TopSpp_Fixed_", param_tag, ".csv"), row.names = FALSE)
+write.csv(fit_df,   paste0("./Outputs/IntraspecificShift_TopSpp_Fit_", param_tag, ".csv"), row.names = FALSE)
 
 save_as_docx(values = setNames(tables, paste0("Table S", seq_along(tables), ". ", names(tables))),
              path = paste0(table_dir, "Tables_TopSpp_", param_tag, ".docx"))
