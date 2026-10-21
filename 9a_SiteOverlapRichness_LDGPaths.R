@@ -191,6 +191,27 @@ ggplot(siteDF, aes(x=niche_range_obs, y=overlap_depth_obs)) +
         legend.position.inside = c(0.9, 0.9))
 dev.off()
 
+library(plotly)
+plot_ly(
+  siteDF,
+  x = ~niche_range_obs,
+  y = ~overlap_depth_obs,
+  z = ~sdnnd_obs,
+  color = ~richness,
+  colors = c("purple", "orange"),
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 5)
+) %>%
+  layout(
+    scene = list(
+      xaxis = list(title = "Breadth"),
+      yaxis = list(title = "Depth"),
+      zaxis = list(title = "Evenness")
+    ),
+    legend = list(title = list(text = "Observed Richness"))
+  )
+
 
 #Env Variaibles
 siteDF$domainID<-NULL
@@ -221,21 +242,25 @@ siteDF$log_richness<-log10(siteDF$richness+0.01)
 siteDF$log_bio01_sq<-log10(siteDF$bio01_sq+.001)
 siteDF$log_bio01_sq
 siteDF$log_mpd<-sqrt(siteDF$mpd)
-siteDF$sdnnd_obs[siteDF$sdnnd_obs<=0] <- NA
-siteDF$sqrt_sdnnd_obs<-sqrt(siteDF$sdnnd_obs)
 
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","sdnnd_obs","mpd","richness","log_richness")])
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","sqrt_sdnnd_obs","mpd","richness","log_richness")])
+min(siteDF$sdnnd_obs)
+siteDF$sdnnd_obs[siteDF$sdnnd_obs<=0] <- NA
+min(siteDF$sdnnd_obs, na.rm = TRUE)
+max(siteDF$sdnnd_obs, na.rm = TRUE)
+siteDF$evenness <- max(siteDF$sdnnd_obs, na.rm = TRUE) - siteDF$sdnnd_obs + min(siteDF$sdnnd_obs, na.rm = TRUE)
+
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","evenness","mpd","richness","log_richness")])
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","evenness","mpd","richness","log_richness")])
 
 n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
-                        "niche_range_obs","overlap_depth_obs","sdnnd_obs","mpd",
+                        "niche_range_obs","overlap_depth_obs","evenness","mpd",
                         "log_richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
 plot(n)
 
 n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
-                        "niche_range_obs","overlap_depth_obs","sdnnd_obs","mpd",
+                        "niche_range_obs","overlap_depth_obs","evenness","mpd",
                         "richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
@@ -245,7 +270,7 @@ View(siteDF[n$multivariate_outliers$Observation,])
 ## 1. CONFIG -- edit these, everything downstream is parameterized
 ## ============================================================ ##
 RANGE_COL     <-"niche_range_obs"
-EVENNESS_COL     <-"sdnnd_obs"
+EVENNESS_COL     <-"evenness"
 COOCCURANCE_COL     <-"overlap_depth_obs"
 PHYLO_COL <- "mpd"
 RICH_COL   <- "richness"
@@ -394,18 +419,11 @@ sem_Hyp_driven_model_noPhylo_grouped<-sem(Hyp_driven_model_nophylo,
 ## ============================================================ ##
 ## 3. evaluate Models
 ## ============================================================ ##
-# AIC(sem_Saturated_model_grouped, sem_Saturated_model_no_direct_grouped,
-#     sem_Hyp_driven_model_grouped, sem_Hyp_driven_model_nodirect_grouped)
-
 fitMeasures(sem_Hyp_driven_model_grouped,
             c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
-# fitMeasures(sem_Hyp_driven_model_grouped_exclude,
-#             c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
 
 fitMeasures(sem_Hyp_driven_model_noPhylo_grouped,
             c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
-# fitMeasures(sem_Hyp_driven_model_noPhylo_grouped_exclude,
-#             c("chisq","df","pvalue","pvalue.scaled","cfi","tli","rmsea","srmr"))
 
 
 modindices(sem_Hyp_driven_model_noPhylo_grouped, sort. = TRUE, minimum.value = 3.84)

@@ -212,6 +212,27 @@ ggplot(plotDF, aes(x=niche_range_obs, y=overlap_depth_obs)) +
   annotate(geom = "text", x = 1.15, y = .15, label = "Highest Total \n Partitioning", size = 5)
 dev.off()
 
+library(plotly)
+plot_ly(
+  plotDF,
+  x = ~niche_range_obs,
+  y = ~overlap_depth_obs,
+  z = ~sdnnd_obs,
+  color = ~richness,
+  colors = c("purple", "orange"),
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 5)
+) %>%
+  layout(
+    scene = list(
+      xaxis = list(title = "Breadth"),
+      yaxis = list(title = "Depth"),
+      zaxis = list(title = "Evenness")
+    ),
+    legend = list(title = list(text = "Observed Richness"))
+  )
+
 #Env Variaibles
 struc<-read.csv("./Outputs/BETplot_Rugosity.csv")
 struc$X<-NULL
@@ -235,16 +256,25 @@ plotDF$log_richness<-log10(plotDF$richness+0.01)
 head(plotDF)
 plotDF$log_rugosity<-log10(plotDF$rugosity_RC +0.01)
 plotDF$sqrt_rugosity<-sqrt(plotDF$rugosity_RC)
+plotDF$log_geodiv<-log10(plotDF$geodiv +0.01)
+
+hist(plotDF$sdnnd_obs)
+min(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
 plotDF$sdnnd_obs[plotDF$sdnnd_obs<=0] <- NA
+hist(log10(plotDF$sdnnd_obs))
+hist(sqrt(plotDF$sdnnd_obs))
 plotDF$sqrt_sdnnd_obs<-sqrt(plotDF$sdnnd_obs)
-plotDF$log_geodiv<-log10(plotDF$geodiv)
 
+min(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
+max(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
+plotDF$evenness <- max(plotDF$sqrt_sdnnd_obs, na.rm = TRUE) - plotDF$sqrt_sdnnd_obs + min(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
+plot(plotDF$evenness~plotDF$sdnnd_obs)
 
-pairs.panels(plotDF[,c("bio_1","Npp","Velocity","rugosity_RC","geodiv","niche_range_obs","overlap_depth_obs","sdnnd_obs","pd","mpd","mntd","log_richness")])
-pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","niche_range_obs","overlap_depth_obs","sqrt_sdnnd_obs","mpd","richness","log_richness")])
+pairs.panels(plotDF[,c("bio_1","Npp","Velocity","rugosity_RC","geodiv","niche_range_obs","overlap_depth_obs","evenness","pd","mpd","mntd","log_richness")])
+pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","niche_range_obs","overlap_depth_obs","evenness","mpd","richness","log_richness")])
 
 n<-mvn(data = plotDF[,c("bio_1","Npp","Velocity","log_geodiv",
-                     "niche_range_obs","overlap_depth_obs","sdnnd_obs","mpd",
+                     "niche_range_obs","overlap_depth_obs","evenness","mpd",
                      "log_richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
@@ -258,7 +288,7 @@ plot(n)
 #                        "log_richness")])
 
 n<-mvn(data = plotDF[,c("bio_1","Npp","Velocity","log_geodiv",
-                        "niche_range_obs","overlap_depth_obs","sdnnd_obs","mpd",
+                        "niche_range_obs","overlap_depth_obs","evenness","mpd",
                      "richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
@@ -272,7 +302,7 @@ plot(n)
 #                        "richness")])
 
 n<-mvn(data = plotDF[,c("bio_1","Npp","Velocity","log_geodiv",
-                        "niche_range_obs","overlap_depth_obs","sdnnd_obs",
+                        "niche_range_obs","overlap_depth_obs","evenness",
                         "richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
@@ -283,7 +313,7 @@ View(plotDF[n$multivariate_outliers$Observation,])
 ## ============================================================ ##
 
 RANGE_COL     <-"niche_range_obs"
-EVENNESS_COL     <-"sdnnd_obs"
+EVENNESS_COL     <-"evenness"
 COOCCURANCE_COL     <-"overlap_depth_obs"
 PHYLO_COL <- "mpd"
 RICH_COL   <- "richness"
