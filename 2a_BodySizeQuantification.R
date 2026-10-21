@@ -487,7 +487,7 @@ var_all_scales$scale<-factor(
   levels = c("Species Level", "Domain Level", "Site Level", "Plot Level"))
 
 dim(var_all_scales)
-#var_all_scales <- var_all_scales %>% filter(scientificName_Species %in% list)
+var_all_scales <- var_all_scales %>% filter(scientificName_Species %in% list)
 dim(var_all_scales)
 
 head(var_all_scales)
