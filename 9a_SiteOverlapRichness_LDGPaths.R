@@ -257,9 +257,11 @@ siteDF$sdnnd_obs[siteDF$sdnnd_obs<=0] <- NA
 min(siteDF$sdnnd_obs, na.rm = TRUE)
 max(siteDF$sdnnd_obs, na.rm = TRUE)
 siteDF$evenness <- max(siteDF$sdnnd_obs, na.rm = TRUE) - siteDF$sdnnd_obs + min(siteDF$sdnnd_obs, na.rm = TRUE)
+siteDF$log_mean_cv_obs <- log(siteDF$mean_cv_obs)
+
 
 pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","mean_cv_obs","evenness","mpd","richness","log_richness")])
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","mean_cv_obs","evenness","mpd","richness","log_richness")])
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","log_mean_cv_obs","evenness","mpd","richness","log_richness")])
 
 n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
                         "niche_range_obs","mean_cv_obs","evenness","mpd",
@@ -280,7 +282,7 @@ View(siteDF[n$multivariate_outliers$Observation,])
 ## ============================================================ ##
 RANGE_COL     <-"niche_range_obs"
 EVENNESS_COL     <-"evenness"
-ITV_COL     <-"mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
+ITV_COL     <-"log_mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
 PHYLO_COL <- "mpd"
 RICH_COL   <- "richness"
 TMEAN_COL  <- "bio01_mean" 
@@ -467,6 +469,7 @@ lavaanPlot(model = sem_Hyp_driven_model_noPhylo_grouped,
            sig = 0.05,            # Only highlight significant paths
            stars = c("regress"))  # Append significance stars to regressions
 
+library(tidySEM)
 
 lay <- get_layout(
   "velocity","range", NA,

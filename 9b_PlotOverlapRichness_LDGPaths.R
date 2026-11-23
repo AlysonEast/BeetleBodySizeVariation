@@ -282,9 +282,10 @@ min(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
 max(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
 plotDF$evenness <- max(plotDF$sqrt_sdnnd_obs, na.rm = TRUE) - plotDF$sqrt_sdnnd_obs + min(plotDF$sqrt_sdnnd_obs, na.rm = TRUE)
 plot(plotDF$evenness~plotDF$sdnnd_obs)
+plotDF$log_mean_cv_obs<-log10(plotDF$mean_cv_obs)
 
 pairs.panels(plotDF[,c("bio_1","Npp","Velocity","rugosity_RC","geodiv","niche_range_obs","mean_cv_obs","evenness","pd","mpd","mntd","log_richness")])
-pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","niche_range_obs","mean_cv_obs","evenness","mpd","richness","log_richness")])
+pairs.panels(plotDF[,c("bio_1","Npp","Velocity","log_rugosity","log_geodiv","niche_range_obs","log_mean_cv_obs","evenness","mpd","richness","log_richness")])
 
 n<-mvn(data = plotDF[,c("bio_1","Npp","Velocity","log_geodiv",
                      "niche_range_obs","mean_cv_obs","evenness","mpd",
@@ -327,9 +328,9 @@ View(plotDF[n$multivariate_outliers$Observation,])
 
 RANGE_COL     <-"niche_range_obs"
 EVENNESS_COL     <-"evenness"
-ITV_COL     <-"mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
+ITV_COL     <-"log_mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
 PHYLO_COL <- "mpd"
-RICH_COL   <- "richness"
+RICH_COL   <- "log_richness"
 TMEAN_COL  <- "bio_1" 
 NPP_COL  <- "Npp"       
 VELOCITY_COL  <- "Velocity"       
