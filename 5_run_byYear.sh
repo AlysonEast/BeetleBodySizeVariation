@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Drive CommunityShape_CustomNulls_ByYear.R across every YEAR x (LEVEL, POOL)
+# Drive 6a_CommunityShape_CustomNulls_ByYear.R across every YEAR x (LEVEL, POOL)
 # pairing, concurrently. No augmentation dimension and no year-averaging stage:
 # each run is one Rscript process writing a uniquely named set of outputs
 # (<LEVEL>_by_<POOL>_<YEAR>_{Pool,Individual,SwapMeans}Null.csv), so runs never
@@ -44,7 +44,7 @@ done | xargs -P "$JOBS" -L1 bash -c '
   LEVEL=$1; POOL=$2; YEAR=$3
   tag="${LEVEL}_by_${POOL}_${YEAR}"
   echo "[start] $tag"
-  if Rscript 6_CommunityShape_CustomNulls_ByYear.R "$LEVEL" "$POOL" "$YEAR" > "logs/${tag}.log" 2>&1; then
+  if Rscript 6a_CommunityShape_CustomNulls_ByYear.R "$LEVEL" "$POOL" "$YEAR" > "logs/${tag}.log" 2>&1; then
     echo "[ done] $tag"
   else
     echo "[FAIL ] $tag  (see logs/${tag}.log)"

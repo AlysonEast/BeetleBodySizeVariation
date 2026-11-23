@@ -43,6 +43,13 @@
 #   cw_kurtosis     community-wide excess kurtosis (abundance-weighted; 0 = Gaussian)
 #   sdnnd           SD of nearest-neighbour distances between species means
 #                   (LOW = even spacing = limiting-similarity signature)
+#   mean_cv         mean intraspecific CV% of elytra length across species with
+#                   >= N_MIN_CV individuals (c4 small-sample corrected; presence-
+#                   based, unweighted). Replaces overlap_depth as the SEM's
+#                   "variance around the species mean" mediator: depth sums
+#                   species curves and so scales with richness by construction,
+#                   whereas an average across species does not. See the helper
+#                   section below for the definition.
 #
 # Abundance filtering is kept as the community definition: a species enters the
 # metrics only if it has a true effort-scaled abundance, which harmonizes the
@@ -80,8 +87,15 @@ MIN_POOL_UNITS <- 2          # drop focal units whose pool holds fewer focal uni
 # as a sensitivity check on the SES sign.
 DEPTH_BW <- 0.009539
 
+# Eligibility for mean_cv. A species enters the community mean CV only if it has
+# at least N_MIN_CV individuals in the focal unit-year (a CV needs >= 2 points);
+# a focal unit gets NA unless at least MIN_CV_SPP species qualify. Singletons
+# still enter every other metric.
+N_MIN_CV   <- 2
+MIN_CV_SPP <- 2
+
 metric_names <- c("overlap_depth", "niche_range", "cwm", "cw_variance",
-                  "cw_skew", "cw_kurtosis", "sdnnd")
+                  "cw_skew", "cw_kurtosis", "sdnnd", "mean_cv")
 
 # translate the LEVEL / POOL choices into column names
 if (LEVEL == "plot") FOCAL_COL <- "plotID"
@@ -176,7 +190,7 @@ if (length(missing_keys))
 # OBSERVED community, so it does not depend on the null; computed once and merged
 # into each null's output, like `lat`.
 n_sp_tab <- data.frame(FOCAL = focal_units, n_comm_sp = NA_integer_,
-                       stringsAsFactors = FALSE)
+                       n_cv_sp = NA_integer_, stringsAsFactors = FALSE)
 for (r in seq_along(focal_units)) {
   f        <- focal_units[r]
   in_focal <- dat$FOCAL == f
@@ -186,9 +200,13 @@ for (r in seq_along(focal_units)) {
 
   ok  <- is.finite(tr_f) & !is.na(sp_f) & sp_f != "" & sp_f %in% names(abund_f)
   n_sp_tab$n_comm_sp[r] <- length(unique(sp_f[ok]))
+  n_sp_tab$n_cv_sp[r]   <- sum(table(sp_f[ok]) >= N_MIN_CV)   # species entering mean_cv
 }
 message("Computable focal units this year (>= 2 community species): ",
         sum(n_sp_tab$n_comm_sp >= 2, na.rm = TRUE), " of ", nrow(n_sp_tab))
+message("Focal units with mean_cv defined (>= ", MIN_CV_SPP, " species with n >= ",
+        N_MIN_CV, "): ", sum(n_sp_tab$n_cv_sp >= MIN_CV_SPP, na.rm = TRUE),
+        " of ", nrow(n_sp_tab))
 
 #### HELPER: abundance-weighted community moments ####
 # Moments of the community trait distribution, weighting each species by its TRUE
@@ -234,6 +252,47 @@ cw_moments <- function(traits, sp, abund) {
   out
 }
 
+#### HELPER: mean intraspecific CV across species ####
+# The community's "variance around the species mean" axis (mechanism 1: species
+# differentiate by narrowing their own spread). For every species with
+# n >= N_MIN_CV individuals:
+#   CV%  = 100 * sd(x) / mean(x), on RAW elytra length (x = 10^log10 length),
+#   CV%* = CV% / c4(n),  c4(n) = sqrt(2/(n-1)) * gamma(n/2) / gamma((n-1)/2),
+#          the standard unbiasing constant for a normal-sample SD.
+#   Why correct at all: the sample SD is biased low at small n, and n per species
+#   is smallest in rich plots, so an uncorrected mean CV would pick up a richness
+#   artifact. Why c4 and not Sokal & Rohlf's (1 + 1/(4n)): in simulation
+#   (lognormal species, true CV 5-20%) that approximation leaves CV 10-13% too
+#   low at n = 2 and 4-6% too low at n = 3, whereas CV/c4(n) is within 0.5% of
+#   the truth at CV 5-10% for every n = 2-20 (within ~3% at CV 20%), and community
+#   mean_cv shows no trend with richness (S = 2-20, n drawn from 2-6).
+# The community value is the UNWEIGHTED mean of CV%* across qualifying species
+# (presence-based like depth and niche_range, so it does not inherit the pitfall
+# activity-density bias). It is an average, not a sum, so it does not scale with
+# richness by construction. CV is scale-free, so latitudinal shifts in mean body
+# size (the Bergmann signal) do not leak in. Precedent: Bastias et al. 2017
+# PLoS ONE (mean species CV per community vs. richness).
+#
+# Null behaviour: under SWAP-MEANS each species keeps its log-scale deviations,
+# i.e. it is multiplied by a constant on the raw scale, so its CV is unchanged ->
+# mean_cv is invariant by construction (CI = obs, ses = NA), like sdnnd. Under the
+# INDIVIDUAL null the SES asks whether local within-species spread is narrower
+# (lower) or wider (higher) than the same species' spread in the regional pool.
+#
+# Returns NA if fewer than MIN_CV_SPP species qualify.
+mean_cv <- function(traits, sp) {
+  x   <- 10^as.numeric(traits)                       # back to cm
+  n_s <- table(sp)
+  qual <- names(n_s)[n_s >= N_MIN_CV]
+  if (length(qual) < MIN_CV_SPP) return(NA_real_)
+  cv <- vapply(qual, function(s) {
+    xs <- x[sp == s]; n <- length(xs)
+    c4 <- sqrt(2 / (n - 1)) * exp(lgamma(n / 2) - lgamma((n - 1) / 2))
+    100 * sd(xs) / mean(xs) / c4
+  }, numeric(1))
+  mean(cv)
+}
+
 #### HELPER: the metric panel for one community ####
 # Called once for the observed community and once for every null draw, so the
 # metric definitions live in exactly one place. Returns a named vector in
@@ -250,7 +309,7 @@ community_metrics <- function(traits, sp, abund) {
   traits <- traits[ok]; sp <- sp[ok]
 
   out <- c(overlap_depth = NA, niche_range = NA, cwm = NA, cw_variance = NA,
-           cw_skew = NA, cw_kurtosis = NA, sdnnd = NA)
+           cw_skew = NA, cw_kurtosis = NA, sdnnd = NA, mean_cv = NA)
   if (length(unique(sp)) < 1) return(out)
 
   # community-wide overlap depth (fixed bandwidth; presence-based, all species)
@@ -273,6 +332,9 @@ community_metrics <- function(traits, sp, abund) {
     nn   <- pmin(c(gaps, Inf), c(Inf, gaps))         # nearest-neighbour distance per species
     out["sdnnd"] <- sd(nn)
   }
+
+  # mean intraspecific CV% across species with n >= N_MIN_CV (NA if too few)
+  out["mean_cv"] <- mean_cv(traits, sp)
   out
 }
 
@@ -421,7 +483,8 @@ message("wrote ", OUT_PREFIX, "_IndividualNull.csv  (", nrow(indiv_results), " f
 # Singletons are KEPT (no >= 2 filter): a one-specimen species has a within-
 # species deviation of 0 and is simply relocated to a permuted mean. sdnnd is
 # invariant under this null by construction (the SET of means is only permuted),
-# so it reports CI = obs, ses = NA -- expected, not a bug.
+# so it reports CI = obs, ses = NA -- expected, not a bug. mean_cv is invariant
+# for the same reason (each species keeps its own deviations, so its CV is fixed).
 set.seed(SEED)
 
 swap_results <- data.frame(FOCAL = focal_units, stringsAsFactors = FALSE)

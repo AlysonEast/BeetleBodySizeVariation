@@ -1,14 +1,16 @@
-#### COMPARE NULL MODELS, YEARS, POOLS AND SCALES  (niche_range + overlap_depth) ####
+#### COMPARE NULL MODELS, YEARS, POOLS AND SCALES  (niche_range + mean_cv) ####
 # -----------------------------------------------------------------------------
 # Companion to 6a_CommunityShape_CustomNulls_ByYear.R, which writes one file per
 #   <LEVEL>_by_<POOL>_<YEAR>_<PoolNull|IndividualNull|SwapMeansNull>.csv
 # holding, per metric, <metric>_obs / _lower / _upper / _ses / _dir, plus the
 # focal id (plotID/siteID), the pool id, latitude, and n_comm_sp.
 #
-# 6a writes seven metrics; this script compares only the two that carry the
+# 6a writes eight metrics; this script compares only the two that carry the
 # analysis:
 #   niche_range    width of occupied trait space (2.5-97.5% span)
-#   overlap_depth  mean peak-scaled species co-occupancy over the occupied range
+#   mean_cv        mean intraspecific CV% across species with n >= N_MIN_CV
+#                  (invariant under swap-means by construction, so its
+#                  swap-means SES is NA)
 # There is no augmentation dimension any more.
 #
 # Nothing is recomputed. Each comparison pairs focal units across ONE choice,
@@ -47,8 +49,9 @@ OUT_DIR <- "./Outputs"
 FIG_DIR <- "./Figures/NullComparisons"
 dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
 
-METRICS     <- c("niche_range", "overlap_depth")
-METRIC_LABS <- c(niche_range = "Niche range", overlap_depth = "Overlap depth")
+# overlap_depth is still written by 6a; add it back here to compare it with mean_cv.
+METRICS     <- c("niche_range", "mean_cv")
+METRIC_LABS <- c(niche_range = "Niche range", mean_cv = "Mean intraspecific CV (%)")
 NULLS       <- c("PoolNull", "IndividualNull", "SwapMeansNull")
 NULL_LABS   <- c(PoolNull = "Pool null", IndividualNull = "Individual null",
                  SwapMeansNull = "Swap-means null")
