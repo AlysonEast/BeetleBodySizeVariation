@@ -1072,6 +1072,12 @@ ggplot(plot_cummunity_summary, aes(x=latitude, y=range)) +
   #      caption = "98% (red), Mean (black), 2% (blue)")
 
 #No aggrigation
+sort(table(plot_species_var$scientificName_Species), decreasing = T)[1:50]
+table(all_elytra$latitude, useNA = "always")
+all_elytra$latitude<-NULL
+all_elytra_lat<-merge(all_elytra, neon_location_BET, by="plotID")
+head(all_elytra_lat)
+
 ggplot(all_elytra_lat, aes(x=latitude, y=cm_elytra_max_length)) +
   geom_point(col="grey") +
   geom_smooth(method = "lm", col="grey", alpha=0.15)+
@@ -1088,10 +1094,6 @@ ggplot(all_elytra_lat, aes(x=latitude, y=cm_elytra_max_length)) +
   theme_pubr() +
   theme(legend.position = "None")
 
-
-sort(table(plot_species_var$scientificName_Species), decreasing = T)[1:50]
-all_elytra_lat<-merge(all_elytra, neon_location_BET, by="plotID")
-head(all_elytra_lat)
 
 all_elytra_lat_subset <- all_elytra_lat %>%
   group_by(scientificName_Species) %>%
@@ -1488,3 +1490,83 @@ plot(m_min_plot_cont)
 summary(m_min_plot_cont)
 with(summary(m_min_plot_cont), 1 - deviance/null.deviance)
 
+
+png("./Figures/BodySizeQuantification/SpeciesBodysize_latitude.png", units = "in", width = 6, height = 5, res=300)
+ggplot(all_elytra_lat_subset, aes(x=latitude, y=cm_elytra_max_length, colour = scientificName_Species)) +
+  geom_point(alpha=0.2) +
+  geom_smooth(method = "lm", alpha=0.15, se = FALSE)+
+  theme_pubr() +
+  theme(legend.position = "None")+
+  labs(title = "Species Bodysize by Latitude",
+       x = "Latitude",
+       y = "Elytra Length (cm)",
+       caption = "subset to species that appear in more than 3 sites")
+dev.off()
+
+# 1. Species x site means (assumes a siteID column; swap in your site column name)
+site_means <- all_elytra_lat_subset %>%
+  group_by(scientificName_Species, siteID.x, latitude) %>%
+  summarise(mean_len = mean(cm_elytra_max_length, na.rm = TRUE),
+            n = n(), .groups = "drop")
+
+# 2. Per-species slope on log scale, fit to site means
+slopes <- site_means %>%
+  group_by(scientificName_Species) %>%
+  summarise(
+    slope = coef(lm(log(mean_len) ~ latitude))[2],
+    p     = summary(lm(log(mean_len) ~ latitude))$coefficients[2, 4],
+    .groups = "drop") %>%
+  mutate(trend = case_when(
+    p >= 0.05 ~ "No trend",
+    slope > 0 ~ "Larger toward poles",
+    TRUE      ~ "Smaller toward poles"),
+    trend = factor(trend, levels = c("Larger toward poles",
+                                     "Smaller toward poles", "No trend")))
+
+plot_df <- left_join(site_means, slopes, by = "scientificName_Species")
+trend_cols <- c("Larger toward poles"  = "#D55E00",
+                "Smaller toward poles" = "#0072B2",
+                "No trend"             = "grey75")
+
+# 3. Plot: gray lines drawn first so significant ones sit on top
+p <- ggplot(plot_df, aes(latitude, mean_len,
+                         group = scientificName_Species, colour = trend)) +
+  geom_point(alpha = 0.3, size = 1) +
+  geom_smooth(data = ~ filter(.x, trend == "No trend"),
+              method = "lm", se = FALSE, linewidth = 0.4) +
+  geom_smooth(data = ~ filter(.x, trend != "No trend"),
+              method = "lm", se = FALSE, linewidth = 0.7) +
+  scale_y_log10(breaks = c(0.1, 0.25, 0.5, 1, 1.5)) +
+  scale_colour_manual(values = trend_cols, name = NULL) +
+  labs(x = "Latitude (°N)", y = "Mean elytra length (cm, log scale)") +
+  theme_classic(base_size = 11) +
+  theme(legend.position = "top")
+
+ggsave("./Figures/BodySizeQuantification/SpeciesBodysize_latitude.png",
+       p, width = 6.5, height = 4.5, dpi = 300)
+
+library(dplyr)
+library(emmeans)
+
+# Fit on species x site means (site_means from the plotting code), so
+# individuals within a site aren't treated as independent replicates,
+# and the classification matches your figure
+m_int <- lm(log(mean_len) ~ latitude * scientificName_Species, data = site_means)
+
+# One latitude slope per species, with CIs and FDR-adjusted p-values
+sp_slopes <- emtrends(m_int, ~ scientificName_Species, var = "latitude") %>%
+  summary(infer = TRUE, adjust = "fdr") %>%
+  as.data.frame() %>%
+  mutate(
+    pct_per_10deg = (exp(latitude.trend * 10) - 1) * 100,  # % size change per 10° latitude
+    trend = case_when(
+      p.value >= 0.05      ~ "No trend",
+      latitude.trend > 0   ~ "Larger toward poles",
+      TRUE                 ~ "Smaller toward poles"))
+
+# The tally
+sp_slopes %>%
+  group_by(trend) %>%
+  summarise(n_species = n(),
+            median_pct_per_10deg = median(pct_per_10deg),
+            range = paste(round(range(pct_per_10deg), 1), collapse = " to "))
