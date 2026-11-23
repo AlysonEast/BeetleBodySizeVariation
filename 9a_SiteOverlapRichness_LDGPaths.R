@@ -7,7 +7,12 @@
 ##   Climate      : Tmean (bio01_mean) + Precip (bio12_mean)
 ##   Productivity : NPP   (added below from NEONSiteNPP.csv)
 ##   Heterogeneity: Geodiv (an srtm_* surface metric)  <-- CONFIRM WHICH COLUMN
-##   Interaction  : Overlap   (trait overlap)              <-- overlap_unnorm_obs per instruction
+##   Body-size structure mediators (from 6a):
+##     range : niche breadth (niche_range_obs)           -> expanding niche volume
+##     even  : spacing evenness (inverted sqrt sdnnd_obs) -> shifting species means
+##     itv   : mean intraspecific CV% (mean_cv_obs)       -> variance around species means
+##             (replaces overlap_depth_obs, which scales with richness by construction;
+##              NA where < 2 species have n >= 2, handled by FIML)
 ##   Response     : Richness (median_richness)
 ##
 ## Full path model + 7 candidate models for selection (from sketch).
@@ -72,6 +77,9 @@ plot(pair$n_comm_sp.x~pair$n_comm_sp.y)
 abline(a=0, b=1)
 
 plot(pair$niche_range_obs.x~pair$niche_range_obs.y)
+abline(a=0, b=1)
+
+plot(pair$mean_cv_obs.x~pair$mean_cv_obs.y)
 abline(a=0, b=1)
 
 plot(pair$pd.x~pair$pd.y)
@@ -162,6 +170,7 @@ ggplot(preExclusion, aes(x=richness, y=n_comm_sp)) +
   theme_pubr()
 
 png("./Figures/SiteRichnessMetrics.png", res = 300, height = 8, width = 8, units = "in")
+# Legacy breadth x depth figure (depth is no longer an SEM mediator; kept for comparison)
 ggplot(siteDF, aes(x=niche_range_obs, y=overlap_depth_obs, colour = richness)) +
   geom_point(size=4) +
   scale_colour_gradient(low = "purple", high = "orange") +
@@ -195,7 +204,7 @@ library(plotly)
 plot_ly(
   siteDF,
   x = ~niche_range_obs,
-  y = ~overlap_depth_obs,
+  y = ~mean_cv_obs,
   z = ~sdnnd_obs,
   color = ~richness,
   colors = c("purple", "orange"),
@@ -206,7 +215,7 @@ plot_ly(
   layout(
     scene = list(
       xaxis = list(title = "Breadth"),
-      yaxis = list(title = "Depth"),
+      yaxis = list(title = "ITV (mean CV%)"),
       zaxis = list(title = "Evenness")
     ),
     legend = list(title = list(text = "Observed Richness"))
@@ -237,7 +246,7 @@ vel<-read.csv("./Outputs/BeetleSiteswVelocity.csv")
 siteDF<-merge(siteDF, vel, by="siteID")
 #### Pair site#
 
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","bio01_sq","niche_range_obs","overlap_depth_obs","pd","mpd","mntd","pd_ses","pd_p","richness")])
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","bio01_sq","niche_range_obs","mean_cv_obs","pd","mpd","mntd","pd_ses","pd_p","richness")])
 siteDF$log_richness<-log10(siteDF$richness+0.01)
 siteDF$log_bio01_sq<-log10(siteDF$bio01_sq+.001)
 siteDF$log_bio01_sq
@@ -249,18 +258,18 @@ min(siteDF$sdnnd_obs, na.rm = TRUE)
 max(siteDF$sdnnd_obs, na.rm = TRUE)
 siteDF$evenness <- max(siteDF$sdnnd_obs, na.rm = TRUE) - siteDF$sdnnd_obs + min(siteDF$sdnnd_obs, na.rm = TRUE)
 
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","evenness","mpd","richness","log_richness")])
-pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","overlap_depth_obs","evenness","mpd","richness","log_richness")])
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","mean_cv_obs","evenness","mpd","richness","log_richness")])
+pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","mean_cv_obs","evenness","mpd","richness","log_richness")])
 
 n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
-                        "niche_range_obs","overlap_depth_obs","evenness","mpd",
+                        "niche_range_obs","mean_cv_obs","evenness","mpd",
                         "log_richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
 plot(n)
 
 n<-mvn(data = siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq",
-                        "niche_range_obs","overlap_depth_obs","evenness","mpd",
+                        "niche_range_obs","mean_cv_obs","evenness","mpd",
                         "richness")], multivariate_outlier_method="adj")
 n$multivariate_normality
 head(n$multivariate_outliers)
@@ -271,7 +280,7 @@ View(siteDF[n$multivariate_outliers$Observation,])
 ## ============================================================ ##
 RANGE_COL     <-"niche_range_obs"
 EVENNESS_COL     <-"evenness"
-COOCCURANCE_COL     <-"overlap_depth_obs"
+ITV_COL     <-"mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
 PHYLO_COL <- "mpd"
 RICH_COL   <- "richness"
 TMEAN_COL  <- "bio01_mean" 
@@ -295,14 +304,14 @@ dat <- data.frame(
   geodiv = siteDF[[GEODIV_COL]],
   range      = siteDF[[RANGE_COL]],
   even      = siteDF[[EVENNESS_COL]],
-  cooccurrence = siteDF[[COOCCURANCE_COL]],
+  itv = siteDF[[ITV_COL]],
   phylo = siteDF[[PHYLO_COL]],
   rich   = siteDF[[RICH_COL]]
 )
 ## complete-case across ALL model variables so every candidate model is fit on
 ## identical rows (required for valid AIC/BIC comparison). With the current
 ## Geodiv column all 47 sites should be retained -- verify in the printout.
-model_vars <- c("tmean", "npp", "cooccurrence", "range", "rich", "even","velocity","geodiv","phylo")
+model_vars <- c("tmean", "npp", "itv", "range", "rich", "even","velocity","geodiv","phylo")
 cc <- complete.cases(dat[, model_vars])
 
 cat("\n--- complete-case summary ---\n")
@@ -325,25 +334,25 @@ dev.off()
 ## ============================================================ ##
 ## 3. Candidate Models
 ## ============================================================ ##
-#___________________Env Range and Depth___________________
+#___________________Env, Range, ITV (mean CV), Evenness___________________
 Hyp_driven_model <- '
   range ~ r1*tmean + r2*npp + r3*velocity
   
   even ~ e1*tmean + e3*velocity 
 
-  cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
+  itv ~ o2*npp + o3*velocity + o4*geodiv
 
   phylo ~ p1*tmean + p2*npp + p3*velocity + p4*geodiv
 
-  range ~~ cooccurrence
-  even ~~ cooccurrence
+  range ~~ itv
+  even ~~ itv
   range ~~ even
-  phylo ~~ cooccurrence
+  phylo ~~ itv
   phylo ~~ range
   phylo ~~ even
 
   rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence + d3*phylo + d4*even 
+         d1*range + d2*itv + d3*phylo + d4*even 
 
   # indirect paths to richness
   ind_temp_range := r1*d1
@@ -353,9 +362,9 @@ Hyp_driven_model <- '
   ind_temp_even := e1*d4
   ind_velocity_even := e3*d4
 
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_spatial_co := o4*d2
+  ind_npp_itv := o2*d2
+  ind_velocity_itv := o3*d2
+  ind_spatial_itv := o4*d2
   
   ind_temp_phylo := p1*d3
   ind_npp_phylo := p2*d3
@@ -374,14 +383,14 @@ Hyp_driven_model_nophylo <- '
   
   even ~ e1*tmean + e3*velocity 
 
-  cooccurrence ~ o2*npp + o3*velocity + o4*geodiv
+  itv ~ o2*npp + o3*velocity + o4*geodiv
   
-  range ~~ cooccurrence
-  even ~~ cooccurrence
+  range ~~ itv
+  even ~~ itv
   range ~~ even
   
   rich ~ c1*tmean + c2*npp + c3*velocity + c4*geodiv +
-         d1*range + d2*cooccurrence + d3*even
+         d1*range + d2*itv + d3*even
 
   # indirect paths to richness
   ind_temp_range := r1*d1
@@ -391,9 +400,9 @@ Hyp_driven_model_nophylo <- '
   ind_temp_even := e1*d3
   ind_velocity_even := e3*d3
 
-  ind_npp_co := o2*d2
-  ind_velocity_co := o3*d2
-  ind_spatial_co := o4*d2
+  ind_npp_itv := o2*d2
+  ind_velocity_itv := o3*d2
+  ind_spatial_itv := o4*d2
 
   # total effects on richness
   tot_tmean := c1 + r1*d1 + e1*d3
@@ -462,14 +471,14 @@ lavaanPlot(model = sem_Hyp_driven_model_noPhylo_grouped,
 lay <- get_layout(
   "velocity","range", NA,
   "tmean", "even",  "rich",
-  "npp","cooccurrence", NA,
+  "npp","itv", NA,
   "geodiv", "phylo", NA,
   rows = 4)
 #
 lay2 <- get_layout(
   "velocity","range", NA,
   "tmean", "even",  "rich",
-  "npp","cooccurrence", NA,
+  "npp","itv", NA,
   "geodiv", NA, NA,
   rows = 4)
 #
@@ -496,7 +505,7 @@ library(semPlot)
 
 lay <- matrix(
   c(.7,  0,   # range 
-    0,  1.5,   # cooccurrence 
+    0,  1.5,   # itv 
     0, -1.5,   # phylo
     3,  0,      # rich
     -3,  1.5,   # tmean

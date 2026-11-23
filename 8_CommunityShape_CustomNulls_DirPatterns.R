@@ -1,4 +1,4 @@
-#### SIGNIFICANCE FLAGS, SES, AND MAPS ACROSS NULL MODELS  (niche_range + overlap_depth) ####
+#### SIGNIFICANCE FLAGS, SES, AND MAPS ACROSS NULL MODELS  (niche_range + mean_cv) ####
 # -----------------------------------------------------------------------------
 # Companion to 6a_CommunityShape_CustomNulls_ByYear.R, which writes one file per
 #   <LEVEL>_by_<POOL>_<YEAR>_<PoolNull|IndividualNull|SwapMeansNull>.csv
@@ -6,12 +6,14 @@
 # "lower" / "neutral" / "higher": whether the observed value falls below, inside,
 # or above the null 2.5-97.5% CI. "neutral" = not significant; "lower"/"higher"
 # = a significant departure, whose sign is the ecological signal:
-#   overlap_depth  higher = clustering (filtering-consistent),
-#                  lower  = overdispersion (competition-consistent)
+#   mean_cv        higher = species more variable than the null,
+#                  lower  = narrower within-species spread (under the
+#                  individual null: locally contracted relative to the pool);
+#                  invariant under swap-means, so always neutral there
 #   niche_range    higher = wider occupied trait space than the null,
 #                  lower  = contracted trait space
 #
-# Only the two analysis metrics are kept (niche_range, overlap_depth). There is
+# Only the two analysis metrics are kept (niche_range, mean_cv). There is
 # no augmentation dimension any more, so every section writes ONE set of outputs.
 #
 # YEARS: for the flag and SES summaries (sections 3-4), both years are pooled, so
@@ -45,8 +47,9 @@ OUT_DIR <- "./Outputs"
 FIG_DIR <- "./Figures/DirPatterns"
 dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
 
-METRICS     <- c("niche_range", "overlap_depth")
-METRIC_LABS <- c(niche_range = "Niche range", overlap_depth = "Overlap depth")
+# overlap_depth is still written by 6a; add it back here to compare it with mean_cv.
+METRICS     <- c("niche_range", "mean_cv")
+METRIC_LABS <- c(niche_range = "Niche range", mean_cv = "Mean intraspecific CV (%)")
 NULLS       <- c("PoolNull", "IndividualNull", "SwapMeansNull")
 NULL_LABS   <- c(PoolNull = "Pool null", IndividualNull = "Individual null",
                  SwapMeansNull = "Swap-means null")

@@ -12,8 +12,8 @@ I ask four questions:
 
 1. **How is body size distributed and partitioned?** Distribution shape (skew, kurtosis, Hartigan's dip test) and coefficient of variation across nested spatial scales.
 2. **Does intraspecific body size vary in space, and why?** Tukey HSD tests among sites and among plots within sites, then per-species mixed models relating local body size to environment and competition (character displacement terms).
-3. **Is community body-size structure more or less structured than chance?** Seven community-shape metrics tested against three custom null models, at plot and site scales and across regional pool extents.
-4. **Does body-size niche space mediate the environment-richness relationship?** Structural equation models (lavaan) in which climate, productivity, climate velocity, and geodiversity act on richness directly and through niche breadth, niche depth, and spacing evenness.
+3. **Is community body-size structure more or less structured than chance?** Eight community-shape metrics tested against three custom null models, at plot and site scales and across regional pool extents.
+4. **Does body-size niche space mediate the environment-richness relationship?** Structural equation models (lavaan) in which climate, productivity, climate velocity, and geodiversity act on richness directly and through niche breadth, mean intraspecific CV, and spacing evenness.
 
 ## Repository structure
 
@@ -106,13 +106,13 @@ Compact definitions. Each script's header comment holds the full rationale.
 | **Individual** | Keeps observed species and abundances; redraws each species' individuals from its pool-level individuals. The individual-level-data test. |
 | **Swap-means** | Keeps within-species deviations but permutes species onto each other's community means. Needs no pool. |
 
-Each null reports, per metric, the observed value, the null 2.5% and 97.5% bounds, the SES, and a direction flag (`lower`, `neutral`, `higher`). Metrics: `overlap_depth`, `niche_range`, `cwm`, `cw_variance`, `cw_skew`, `cw_kurtosis`, and `sdnnd`. Steps 7 and 8 focus on `niche_range` and `overlap_depth`.
+Each null reports, per metric, the observed value, the null 2.5% and 97.5% bounds, the SES, and a direction flag (`lower`, `neutral`, `higher`). Metrics: `overlap_depth`, `niche_range`, `cwm`, `cw_variance`, `cw_skew`, `cw_kurtosis`, `sdnnd`, and `mean_cv`. Steps 7 and 8 focus on `niche_range` and `mean_cv`.
 
-`overlap_depth` is computed by `community_depth.R`: peak-scaled species densities on a common grid, summed and averaged over the occupied range. It replaces the pairwise O-statistic, which becomes zero-inflated in species-rich communities. All metrics run on observed individuals with no augmentation; a species enters a community only if it has a true effort-scaled NEON abundance.
+`overlap_depth` is computed by `community_depth.R`: peak-scaled species densities on a common grid, summed and averaged over the occupied range. It replaces the pairwise O-statistic, which becomes zero-inflated in species-rich communities. Observed depth scales with richness, so it is no longer an SEM mediator. `mean_cv` is the unweighted mean of c4-corrected CV% across species with n ≥ `N_MIN_CV` (default 2), and is NA where fewer than `MIN_CV_SPP` (2) species qualify; see the helper header in 6a. All metrics run on observed individuals with no augmentation; a species enters a community only if it has a true effort-scaled NEON abundance.
 
 ### Richness SEMs (`9a`, `9b`)
 
-Exogenous predictors are mean annual temperature, MODIS NPP, climate velocity, and geodiversity. Three community mediators carry the body-size signal: breadth (`niche_range_obs`), depth (`overlap_depth_obs`), and evenness (`sdnnd_obs`, inverted so higher values mean more even spacing). Each script fits the model with and without phylogenetic distance (MPD) as an additional mediator. Observed metrics, not SES, enter the models. Column choices sit in the `CONFIG` block (section 1) of each script.
+Exogenous predictors are mean annual temperature, MODIS NPP, climate velocity, and geodiversity. Three community mediators carry the body-size signal: breadth (`niche_range_obs`), intraspecific variation (`mean_cv_obs`, replacing depth), and evenness (`sdnnd_obs`, inverted so higher values mean more even spacing). Each script fits the model with and without phylogenetic distance (MPD) as an additional mediator. Observed metrics, not SES, enter the models. Column choices sit in the `CONFIG` block (section 1) of each script.
 
 ## Supporting scripts
 
@@ -158,7 +158,7 @@ Downstream scripts read `Data/BodysizeCombinedClean.csv`, one row per measured i
 
 - Absolute paths are hard-coded throughout rather than set once.
 - `5_run_byYear.sh` calls `6_CommunityShape_CustomNulls_ByYear.R`, but the script is now `6a_...`, so the driver fails until that line is updated. Header comments in 3, 5, and 6a also still use pre-renumbering script names.
-- Headers in 9a and 9b still describe seven candidate models and `overlap_unnorm_obs`; the scripts now fit one hypothesis-driven model (with and without phylogeny) using the three mediators above.
+- Headers in 9a and 9b still describe seven candidate models; the scripts now fit one hypothesis-driven model (with and without phylogeny) using the three mediators above.
 - 9a and 9b write their model summaries (`site_report*.txt`, `plot_report*.txt`) to the repository root instead of `Outputs/`.
 - `4_Environmental.R` labels the LiDAR voxel step "1 m voxel" but uses `res = 0.5`, and labels 0.5 arc-min WorldClim as "~900 km" (it is roughly 1 km).
 - Site geodiversity uses the `bio01_sq` column of the Kapsar et al. footprint file. <!-- TODO: confirm this is the intended geodiversity metric. -->
