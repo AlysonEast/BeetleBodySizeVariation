@@ -158,8 +158,8 @@ EL_harm <- ElytraLength %>%
     order = individual,
     sampleID = NEON_sampleID,
     scientificName,
-    collectDate,
-    yearCollected,
+    collectDate = NA,
+    yearCollected = 2018,
     imageID = pictureID,
     cm_elytra_max_length,
     latitude
@@ -192,18 +192,24 @@ biorepo_harm  <- biorepo %>%
     order = Order,
     scientificName,
     imageID,
-    px_scalebar = NA, ##Update!!!!
-    cm_scalebar = NA, ##Update!!!!
-    px_elytra_max_length = NA, ##Update!!!!
-    cm_elytra_max_length,
+    px_scalebar = px_per_cm, ##Update!!!!
+    cm_scalebar = 1, ##Update!!!!
+    px_elytra_max_length = length_px, ##Update!!!!
+    cm_elytra_max_length = length_cm,
     yearCollected
   )
 
 #Add in biorepo
 
 all_elytra <- bind_rows(EL_harm, HI_harm, biorepo_harm)
+
+# Attach site latitude to ALL sources (previously only Beetle Palooza rows had it)
+all_elytra$latitude <- NULL
+all_elytra <- merge(all_elytra, meta[, c("site_id", "latitude")],
+                    by.x = "siteID", by.y = "site_id", all.x = TRUE)
 no_measurment<-subset(all_elytra, cm_elytra_max_length<=0)
 all_elytra<-subset(all_elytra, !cm_elytra_max_length<=0)
+
 
 # Extract genus and species only from scientific name
 all_elytra$scientificName_Species<-gsub(r"{\s*\([^\)]+\)}","",as.character(all_elytra$scientificName))
@@ -343,24 +349,24 @@ dim(table(subset(reviewed,status=="Reorder")$imageID))
 (dim(table(subset(reviewed,status=="Reorder")$imageID))/dim(table(reviewed$imageID)))
 
 #Deal with bad annotations
-Need_annotation<-subset(reviewed, status=="Bad")
-write.csv(Need_annotation, "./Outputs/BodySizeMeasuremntsForManualAnnotation.csv")
+#Need_annotation<-subset(reviewed, status=="Bad")
+#write.csv(Need_annotation, "./Outputs/BodySizeMeasuremntsForManualAnnotation.csv")
 
-exclusion<-subset(reviewed, status=="Bad" | status=="Damaged" | status=="Missing")
-exclusion<-unique(exclusion$individualID)
+#exclusion<-subset(reviewed, status=="Bad" | status=="Damaged" | status=="Missing")
+#exclusion<-unique(exclusion$individualID)
 #remove bad annotations from dataset
-all_elytra<-all_elytra %>%
-  filter(!individualID %in% exclusion)
+# all_elytra<-all_elytra %>%
+#   filter(!individualID %in% exclusion)
 #add in manual corrections
 # manual_corrections<-read.csv("./")
 # cbind(all_elytra, manual_corrections)
 
 #deal with reorders
-imageExclusion<-subset(reviewed, status=="Reorder")$imageID
-write.csv(imageExclusion, "./Outputs/BodySizeMeasuremntsForManualReorder.csv")
-#remove bad annotations from dataset
-all_elytra<-all_elytra %>%
-  filter(!imageID %in% imageExclusion)
+# imageExclusion<-subset(reviewed, status=="Reorder")$imageID
+# write.csv(imageExclusion, "./Outputs/BodySizeMeasuremntsForManualReorder.csv")
+# #remove bad annotations from dataset
+# all_elytra<-all_elytra %>%
+#   filter(!imageID %in% imageExclusion)
 #add in manual corrections
 # manual_reorder<-read.csv("./")
 # cbind(all_elytra, manual_reorder)
@@ -370,7 +376,10 @@ all_elytra<-subset(all_elytra, individualID!="NEON.BET.D09.000975") # Wrong Spp,
 all_elytra<-subset(all_elytra, individualID!="NEON.BET.D10.015494") # Wrong Spp, prob individudula ID error
 all_elytra<-subset(all_elytra, individualID!="NEON.BET.D13.001261") # Wrong Spp, prob individudula ID error
 all_elytra<-subset(all_elytra, individualID!="NEON.BET.D13.001271") # Wrong Spp, prob individudula ID error
+all_elytra<-subset(all_elytra, individualID!="NEON.BET.D08.002280") # Wrong Spp, prob individudula ID error
 all_elytra<-subset(all_elytra, individualID!="NEON.BET.D05.003147") # Wrong Spp, prob individudula ID error
+
+
 
 #Hawaii scale bar double sized
 all_elytra$cm_elytra_max_length<-ifelse(all_elytra$imageID=="group_images/IMG_0510.png", all_elytra$cm_elytra_max_length*2, all_elytra$cm_elytra_max_length)   # Scale Bar Doubled
