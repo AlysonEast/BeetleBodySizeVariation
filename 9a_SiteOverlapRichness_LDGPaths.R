@@ -254,10 +254,15 @@ siteDF$log_mpd<-sqrt(siteDF$mpd)
 
 min(siteDF$sdnnd_obs)
 siteDF$sdnnd_obs[siteDF$sdnnd_obs<=0] <- NA
+
+hist(siteDF$sdnnd_obs)
+siteDF$sdnnd_obs<-sqrt(siteDF$sdnnd_obs)
+hist(siteDF$sdnnd_obs)
 min(siteDF$sdnnd_obs, na.rm = TRUE)
 max(siteDF$sdnnd_obs, na.rm = TRUE)
 siteDF$evenness <- max(siteDF$sdnnd_obs, na.rm = TRUE) - siteDF$sdnnd_obs + min(siteDF$sdnnd_obs, na.rm = TRUE)
-siteDF$log_mean_cv_obs <- log(siteDF$mean_cv_obs)
+
+siteDF$log_mean_cv_obs <- log10(siteDF$mean_cv_obs)
 
 
 pairs.panels(siteDF[,c("bio01_mean","Npp","Velocity","log_bio01_sq","niche_range_obs","mean_cv_obs","evenness","mpd","richness","log_richness")])
@@ -282,7 +287,7 @@ View(siteDF[n$multivariate_outliers$Observation,])
 ## ============================================================ ##
 RANGE_COL     <-"niche_range_obs"
 EVENNESS_COL     <-"evenness"
-ITV_COL     <-"log_mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
+ITV_COL     <-"mean_cv_obs"   # mean intraspecific CV%; replaces overlap_depth_obs (depth scales with richness)
 PHYLO_COL <- "mpd"
 RICH_COL   <- "richness"
 TMEAN_COL  <- "bio01_mean" 
@@ -342,7 +347,7 @@ Hyp_driven_model <- '
   
   even ~ e1*tmean + e3*velocity + e4*geodiv
 
-  itv ~ o2*npp + o3*velocity + o4*geodiv
+  itv ~ o1*tmean + o2*npp + o3*velocity + o4*geodiv
 
   phylo ~ p1*tmean + p2*npp + p3*velocity + p4*geodiv
 
@@ -365,6 +370,7 @@ Hyp_driven_model <- '
   ind_velocity_even := e3*d4
   ind_spatial_even := e4*d4
 
+  ind_tmean_itv := o1*d2
   ind_npp_itv := o2*d2
   ind_velocity_itv := o3*d2
   ind_spatial_itv := o4*d2
@@ -376,7 +382,7 @@ Hyp_driven_model <- '
 
 
   # total effects on richness
-  tot_tmean := c1 + r1*d1 + p1*d3 + e1*d4
+  tot_tmean := c1 + r1*d1 + p1*d3 + o1*d2 + e1*d4
   tot_npp := c2 + r2*d1 + o2*d2
   tot_velocity := c3 + r3*d1 + o3*d2 + p3*d3 + e3*d4
   tot_spatial := c4 + o4*d2 + p4*d3 + e4*d4
@@ -386,7 +392,7 @@ Hyp_driven_model_nophylo <- '
   
   even ~ e1*tmean + e3*velocity + e4*geodiv
 
-  itv ~ o2*npp + o3*velocity + o4*geodiv
+  itv ~ o1*tmean + o2*npp + o3*velocity + o4*geodiv
   
   range ~~ itv
   even ~~ itv
@@ -404,12 +410,13 @@ Hyp_driven_model_nophylo <- '
   ind_velocity_even := e3*d3
   ind_spatial_even := e4*d3
 
+  ind_tmean_itv := o1*d2
   ind_npp_itv := o2*d2
   ind_velocity_itv := o3*d2
   ind_spatial_itv := o4*d2
 
   # total effects on richness
-  tot_tmean := c1 + r1*d1 + e1*d3
+  tot_tmean := c1 + r1*d1 + o1*d2 + e1*d3
   tot_npp := c2 + r2*d1 + o2*d2
   tot_velocity := c3 + r3*d1 + o3*d2 + e3*d3
   tot_spatial := c4 + o4*d2 + e4*d3
