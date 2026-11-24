@@ -392,7 +392,7 @@ dev.off()
 Hyp_driven_model <- '
   range ~ r1*tmean + r2*npp + r3*velocity
   
-  even ~ e1*tmean + e3*velocity 
+  even ~ e1*tmean + e3*velocity + e4*geodiv
 
   itv ~ o2*npp + o3*velocity + o4*geodiv
 
@@ -415,6 +415,7 @@ Hyp_driven_model <- '
 
   ind_temp_even := e1*d4
   ind_velocity_even := e3*d4
+  ind_spatial_even := e4*d4
 
   ind_npp_itv := o2*d2
   ind_velocity_itv := o3*d2
@@ -430,12 +431,12 @@ Hyp_driven_model <- '
   tot_tmean := c1 + r1*d1 + p1*d3 + e1*d4
   tot_npp := c2 + r2*d1 + o2*d2
   tot_velocity := c3 + r3*d1 + o3*d2 + p3*d3 + e3*d4
-  tot_spatial := c4 + o4*d2 + p4*d3
+  tot_spatial := c4 + o4*d2 + p4*d3 + e4*d4
 '
 Hyp_driven_model_nophylo <- '
   range ~ r1*tmean + r2*npp + r3*velocity
   
-  even ~ e1*tmean + e3*velocity 
+  even ~ e1*tmean + e3*velocity + e4*geodiv
 
   itv ~ o2*npp + o3*velocity + o4*geodiv
   
@@ -453,6 +454,7 @@ Hyp_driven_model_nophylo <- '
   
   ind_temp_even := e1*d3
   ind_velocity_even := e3*d3
+  ind_spatial_even := e4*d3
 
   ind_npp_itv := o2*d2
   ind_velocity_itv := o3*d2
@@ -462,7 +464,7 @@ Hyp_driven_model_nophylo <- '
   tot_tmean := c1 + r1*d1 + e1*d3
   tot_npp := c2 + r2*d1 + o2*d2
   tot_velocity := c3 + r3*d1 + o3*d2 + e3*d3
-  tot_spatial := c4 + o4*d2
+  tot_spatial := c4 + o4*d2 + e4*d3
 '
 
 sem_Hyp_driven_model_grouped<-sem(Hyp_driven_model, 
