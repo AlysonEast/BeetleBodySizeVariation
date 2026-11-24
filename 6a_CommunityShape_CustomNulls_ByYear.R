@@ -44,7 +44,7 @@
 #   sdnnd           SD of nearest-neighbour distances between species means
 #                   (LOW = even spacing = limiting-similarity signature)
 #   mean_cv         mean intraspecific CV% of elytra length across species with
-#                   >= N_MIN_CV individuals (c4 small-sample corrected; presence-
+#                   >= N_MIN_CV individuals (rarefied to N_MIN_CV; presence-
 #                   based, unweighted). Replaces overlap_depth as the SEM's
 #                   "variance around the species mean" mediator: depth sums
 #                   species curves and so scales with richness by construction,
@@ -87,12 +87,15 @@ MIN_POOL_UNITS <- 2          # drop focal units whose pool holds fewer focal uni
 # as a sensitivity check on the SES sign.
 DEPTH_BW <- 0.009539
 
-# Eligibility for mean_cv. A species enters the community mean CV only if it has
-# at least N_MIN_CV individuals in the focal unit-year (a CV needs >= 2 points);
-# a focal unit gets NA unless at least MIN_CV_SPP species qualify. Singletons
-# still enter every other metric.
-N_MIN_CV   <- 2
-MIN_CV_SPP <- 2
+# mean_cv settings (fixed for reproducibility; see the mean_cv helper below).
+# A species enters the community mean CV only if it has at least N_MIN_CV
+# individuals in the focal unit-year, and is then rarefied to exactly N_MIN_CV
+# individuals RARE_B times. A focal unit gets NA unless at least MIN_CV_SPP
+# species qualify. Species below N_MIN_CV still enter every other metric.
+N_MIN_CV   <- 10
+MIN_CV_SPP <- 1
+RARE_B     <- 100
+RARE_SEED  <- 517
 
 metric_names <- c("overlap_depth", "niche_range", "cwm", "cw_variance",
                   "cw_skew", "cw_kurtosis", "sdnnd", "mean_cv")
@@ -254,41 +257,67 @@ cw_moments <- function(traits, sp, abund) {
 
 #### HELPER: mean intraspecific CV across species ####
 # The community's "variance around the species mean" axis (mechanism 1: species
-# differentiate by narrowing their own spread). For every species with
-# n >= N_MIN_CV individuals:
-#   CV%  = 100 * sd(x) / mean(x), on RAW elytra length (x = 10^log10 length),
-#   CV%* = CV% / c4(n),  c4(n) = sqrt(2/(n-1)) * gamma(n/2) / gamma((n-1)/2),
-#          the standard unbiasing constant for a normal-sample SD.
-#   Why correct at all: the sample SD is biased low at small n, and n per species
-#   is smallest in rich plots, so an uncorrected mean CV would pick up a richness
-#   artifact. Why c4 and not Sokal & Rohlf's (1 + 1/(4n)): in simulation
-#   (lognormal species, true CV 5-20%) that approximation leaves CV 10-13% too
-#   low at n = 2 and 4-6% too low at n = 3, whereas CV/c4(n) is within 0.5% of
-#   the truth at CV 5-10% for every n = 2-20 (within ~3% at CV 20%), and community
-#   mean_cv shows no trend with richness (S = 2-20, n drawn from 2-6).
-# The community value is the UNWEIGHTED mean of CV%* across qualifying species
-# (presence-based like depth and niche_range, so it does not inherit the pitfall
-# activity-density bias). It is an average, not a sum, so it does not scale with
-# richness by construction. CV is scale-free, so latitudinal shifts in mean body
-# size (the Bergmann signal) do not leak in. Precedent: Bastias et al. 2017
-# PLoS ONE (mean species CV per community vs. richness).
+# differentiate by narrowing their own spread).
+#
+# Rarefied CV. Every species with n >= N_MIN_CV (10) individuals in the focal
+# unit-year is subsampled, without replacement, to exactly N_MIN_CV individuals,
+# RARE_B (100) times. Its CV% is the mean over draws of 100 * sd(x) / mean(x), on
+# RAW elytra length (x = 10^log10 length). A species with exactly N_MIN_CV
+# individuals has one possible subsample and is used as is.
+#   Why rarefy: Fluck et al. 2024 (Ecol. Evol., doi:10.1002/ece3.70250) show that
+#   when per-population sample size covaries with the gradient, ITV-environment
+#   tests inflate Type I error, and that equal sample sizes are the most robust
+#   design. Per-species n here covaries with richness and latitude. Rarefying fixes
+#   every species at the same n, so the small-sample bias of CV (about -4% at
+#   n = 10 in simulation, lognormal, true CV 10%) is the same constant in every
+#   unit and cancels out of comparisons and SEM paths; no c4 correction is needed.
+#   Averaging over draws still uses every individual, so species with more
+#   individuals get more precise estimates (simulated relative RMSE 23% at
+#   n = 10, 13% at n = 30).
+#   Why 10: Fluck et al. find CV error rises quickly below ~20 but note "there is
+#   no golden number"; 10 balances precision against coverage (in pooled counts,
+#   63% of plots have >= 1 species with n >= 10 vs. 42% at n >= 20). Same
+#   rarefaction approach as Bastias et al. 2017 PLoS ONE.
+# The community value is the UNWEIGHTED mean of species CV% across qualifying
+# species (MIN_CV_SPP = 1, so a unit with one qualifying species takes that
+# species' CV). Presence-based like depth and niche_range; an average, not a sum,
+# so it does not scale with richness by construction; scale-free, so latitudinal
+# shifts in mean body size (the Bergmann signal) do not leak in.
+#
+# Reproducibility: the subsampling uses its own fixed seed (RARE_SEED) and
+# restores the caller's RNG state afterwards, so (a) the observed value is
+# identical in all three null output files and across reruns, and (b) the null
+# models' own random streams are unchanged by this helper.
 #
 # Null behaviour: under SWAP-MEANS each species keeps its log-scale deviations,
-# i.e. it is multiplied by a constant on the raw scale, so its CV is unchanged ->
-# mean_cv is invariant by construction (CI = obs, ses = NA), like sdnnd. Under the
-# INDIVIDUAL null the SES asks whether local within-species spread is narrower
-# (lower) or wider (higher) than the same species' spread in the regional pool.
+# i.e. it is multiplied by a constant on the raw scale; with the fixed seed it
+# also gets the same subsamples, so its CV is unchanged -> mean_cv is invariant by
+# construction (CI = obs, ses = NA), like sdnnd. Under the INDIVIDUAL null the SES
+# asks whether local within-species spread is narrower (lower) or wider (higher)
+# than the same species' spread in the regional pool.
 #
 # Returns NA if fewer than MIN_CV_SPP species qualify.
 mean_cv <- function(traits, sp) {
-  x   <- 10^as.numeric(traits)                       # back to cm
-  n_s <- table(sp)
+  x    <- 10^as.numeric(traits)                      # back to cm
+  n_s  <- table(sp)
   qual <- names(n_s)[n_s >= N_MIN_CV]
   if (length(qual) < MIN_CV_SPP) return(NA_real_)
+
+  # fixed local seed; restore the caller's RNG state on exit
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (had_seed) old_seed <- get(".Random.seed", envir = globalenv())
+  on.exit(if (had_seed) assign(".Random.seed", old_seed, envir = globalenv())
+          else rm(".Random.seed", envir = globalenv()), add = TRUE)
+  set.seed(RARE_SEED)
+
+  k  <- N_MIN_CV
   cv <- vapply(qual, function(s) {
     xs <- x[sp == s]; n <- length(xs)
-    c4 <- sqrt(2 / (n - 1)) * exp(lgamma(n / 2) - lgamma((n - 1) / 2))
-    100 * sd(xs) / mean(xs) / c4
+    if (n == k) return(100 * sd(xs) / mean(xs))
+    y <- matrix(xs[replicate(RARE_B, sample.int(n, k))], nrow = k)   # k x RARE_B
+    m <- colMeans(y)
+    v <- colSums((y - rep(m, each = k))^2) / (k - 1)
+    mean(100 * sqrt(v) / m)
   }, numeric(1))
   mean(cv)
 }
@@ -333,7 +362,7 @@ community_metrics <- function(traits, sp, abund) {
     out["sdnnd"] <- sd(nn)
   }
 
-  # mean intraspecific CV% across species with n >= N_MIN_CV (NA if too few)
+  # mean rarefied intraspecific CV% across species with n >= N_MIN_CV (NA if none)
   out["mean_cv"] <- mean_cv(traits, sp)
   out
 }
@@ -484,7 +513,8 @@ message("wrote ", OUT_PREFIX, "_IndividualNull.csv  (", nrow(indiv_results), " f
 # species deviation of 0 and is simply relocated to a permuted mean. sdnnd is
 # invariant under this null by construction (the SET of means is only permuted),
 # so it reports CI = obs, ses = NA -- expected, not a bug. mean_cv is invariant
-# for the same reason (each species keeps its own deviations, so its CV is fixed).
+# too (each species keeps its own deviations and, via RARE_SEED, the same
+# rarefaction subsamples, so its CV is fixed).
 set.seed(SEED)
 
 swap_results <- data.frame(FOCAL = focal_units, stringsAsFactors = FALSE)
